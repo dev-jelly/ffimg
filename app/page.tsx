@@ -25,6 +25,10 @@ import {
   type BrowserFfmpeg,
   unmountLocalFile,
 } from "@/lib/ffmpeg-runtime";
+import {
+  estimateOutputSize,
+  OUTPUT_SIZE_MODEL_VERSION,
+} from "@/lib/output-size-estimator.mjs";
 
 type Format = "apng" | "gif";
 type Mode = "Beginner" | "Intermediate" | "Advanced";
@@ -121,6 +125,12 @@ function formatBytes(bytes: number) {
   );
   const value = bytes / 1024 ** index;
   return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+}
+
+function formatEstimatedRange(lowerBytes: number, upperBytes: number) {
+  const lower = formatBytes(lowerBytes);
+  const upper = formatBytes(upperBytes);
+  return lower === upper ? `약 ${lower}` : `약 ${lower} - ${upper}`;
 }
 
 function formatDuration(duration: number | null) {
@@ -220,6 +230,7 @@ export default function Home() {
   const [resultName, setResultName] = useState("");
   const [reducedMotion, setReducedMotion] = useState(false);
   const [showResultPreview, setShowResultPreview] = useState(false);
+  const [announcedPrediction, setAnnouncedPrediction] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sourceUrlRef = useRef<string | null>(null);
@@ -264,18 +275,33 @@ export default function Home() {
     apngCompression,
   ].join("|");
   const sourceDuration = metadata?.duration ?? null;
-  const outputWidth = metadata?.width
-    ? Math.min(normalized.width, metadata.width)
-    : normalized.width;
+  const sizeEstimate = estimateOutputSize({
+    settings: normalized,
+    media: {
+      durationSeconds: metadata?.duration,
+      width: metadata?.width,
+      height: metadata?.height,
+      sizeBytes: file?.size,
+    },
+  });
+  const estimatedOutput =
+    sizeEstimate.status === "available" ? sizeEstimate.output : null;
+  const outputWidth =
+    estimatedOutput?.width ??
+    (metadata?.width
+      ? Math.min(normalized.width, metadata.width)
+      : normalized.width);
   const outputHeight =
-    metadata?.width && metadata.height
+    estimatedOutput?.height ??
+    (metadata?.width && metadata.height
       ? Math.max(
           2,
           Math.round(((outputWidth * metadata.height) / metadata.width) / 2) *
             2,
         )
-      : outputWidth;
-  const frameCount = normalized.fps * normalized.duration;
+      : outputWidth);
+  const frameCount =
+    estimatedOutput?.frameCount ?? normalized.fps * normalized.duration;
   const framePixels = outputWidth * outputHeight;
   const totalPixels = framePixels * frameCount;
   const settingsError = (() => {
@@ -299,16 +325,16 @@ export default function Home() {
     }
     if (mode === "Advanced") {
       if (!Number.isInteger(fps) || fps < 1 || fps > 30) {
-        return "프레임은 1–30 FPS 사이의 정수로 입력해 주세요.";
+        return "프레임은 1-30 FPS 사이의 정수로 입력해 주세요.";
       }
       if (!Number.isInteger(width) || width < 160 || width > 1280) {
-        return "최대 너비는 160–1280px 사이의 정수로 입력해 주세요.";
+        return "최대 너비는 160-1280px 사이의 정수로 입력해 주세요.";
       }
       if (
         format === "gif" &&
         (!Number.isInteger(gifColors) || gifColors < 2 || gifColors > 256)
       ) {
-        return "GIF 색상 수는 2–256 사이의 정수로 입력해 주세요.";
+        return "GIF 색상 수는 2-256 사이의 정수로 입력해 주세요.";
       }
       if (
         format === "apng" &&
@@ -316,7 +342,7 @@ export default function Home() {
           apngCompression < 0 ||
           apngCompression > 9)
       ) {
-        return "APNG 압축은 0–9 사이의 정수로 입력해 주세요.";
+        return "APNG 압축은 0-9 사이의 정수로 입력해 주세요.";
       }
       if (
         sourceDuration === null &&
@@ -707,11 +733,47 @@ export default function Home() {
     }
   }
 
-  const statusText = inspectionWarning ?? stageMessage;
   const outputSummary =
     format === "gif"
-      ? `${Number(normalized.duration.toFixed(1))}초 · ${normalized.fps} FPS · ${normalized.width}px · ${normalized.gifColors}색`
-      : `${Number(normalized.duration.toFixed(1))}초 · ${normalized.fps} FPS · ${normalized.width}px · 압축 ${normalized.apngCompression}`;
+      ? `${Number(normalized.duration.toFixed(1))}초, ${normalized.fps} FPS, ${normalized.width}px, ${normalized.gifColors}색`
+      : `${Number(normalized.duration.toFixed(1))}초, ${normalized.fps} FPS, ${normalized.width}px, 압축 ${normalized.apngCompression}`;
+  const predictionRangeText =
+    sizeEstimate.status === "available" && !settingsError
+      ? formatEstimatedRange(
+          sizeEstimate.rangeBytes.lower,
+          sizeEstimate.rangeBytes.upper,
+        )
+      : null;
+  const predictionLiveText =
+    phase === "inspecting"
+      ? "동영상 정보를 확인하고 예상 용량을 계산하는 중이에요."
+      : settingsError
+        ? "설정을 확인하면 예상 용량을 다시 계산할게요."
+      : predictionRangeText
+        ? `예상 출력 용량은 ${predictionRangeText}예요.`
+        : metadata
+          ? "영상 길이 또는 해상도를 확인할 수 없어 예상 용량을 계산할 수 없어요."
+          : null;
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setAnnouncedPrediction(predictionLiveText ?? "");
+    }, predictionLiveText ? 500 : 0);
+    return () => window.clearTimeout(timeout);
+  }, [predictionLiveText]);
+
+  const statusText =
+    isActive ||
+    phase === "inspecting" ||
+    phase === "complete" ||
+    phase === "cancelled" ||
+    phase === "error"
+      ? stageMessage
+      : settingsError ??
+        ([stageMessage, announcedPrediction, inspectionWarning]
+          .filter(Boolean)
+          .join(" ") ||
+          stageMessage);
 
   return (
     <main className="site-shell">
@@ -1142,7 +1204,7 @@ export default function Home() {
                     </label>
                     {format === "apng" && (
                       <label>
-                        <span>압축 <small>0–9</small></span>
+                        <span>압축 <small>0-9</small></span>
                         <input
                           type="number"
                           min="0"
@@ -1204,7 +1266,7 @@ export default function Home() {
                           disabled={isActive}
                         >
                           <option value="sierra2_4a">Sierra (균형)</option>
-                          <option value="floyd_steinberg">Floyd–Steinberg</option>
+                          <option value="floyd_steinberg">Floyd-Steinberg</option>
                           <option value="bayer">Bayer</option>
                           <option value="none">사용 안 함</option>
                         </select>
@@ -1217,6 +1279,134 @@ export default function Home() {
                 </div>
               )}
 
+              <section
+                className={`prediction-card ${
+                  sizeEstimate.sizeClass === "very-large"
+                    ? "is-very-large"
+                    : sizeEstimate.sizeClass === "large"
+                    ? "is-large"
+                    : settingsError || sizeEstimate.status === "unavailable"
+                      ? "is-unavailable"
+                      : ""
+                }`}
+                aria-labelledby="prediction-title"
+                aria-busy={phase === "inspecting"}
+              >
+                {phase === "inspecting" ? (
+                  <>
+                    <p className="prediction-label" id="prediction-title">
+                      예상 결과 용량
+                    </p>
+                    <p className="prediction-value">계산 중</p>
+                    <p className="prediction-uncertainty" id="prediction-help">
+                      영상 길이와 해상도를 확인하고 있어요.
+                    </p>
+                  </>
+                ) : settingsError ? (
+                  <>
+                    <p className="prediction-label" id="prediction-title">
+                      예상 결과 용량
+                    </p>
+                    <p className="prediction-value">설정을 확인해 주세요</p>
+                    <p className="prediction-uncertainty" id="prediction-help">
+                      올바른 값을 입력하면 예상 범위를 바로 다시 계산할게요.
+                    </p>
+                  </>
+                ) : sizeEstimate.status === "available" ? (
+                  <>
+                    <div className="prediction-heading">
+                      <div>
+                        <p className="prediction-label" id="prediction-title">
+                          {isActive ? "변환 전 예상" : "예상 결과 용량"}
+                        </p>
+                        <output
+                          className="prediction-value"
+                          aria-labelledby="prediction-title"
+                          aria-describedby="prediction-help"
+                        >
+                          {predictionRangeText}
+                        </output>
+                      </div>
+                    </div>
+
+                    {mode !== "Beginner" && (
+                      <dl className="prediction-metrics">
+                        <div>
+                          <dt>출력 크기</dt>
+                          <dd>
+                            {sizeEstimate.output.width} ×{" "}
+                            {sizeEstimate.output.height}px
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>예상 프레임</dt>
+                          <dd>{sizeEstimate.output.frameCount}장</dd>
+                        </div>
+                        <div>
+                          <dt>확실성</dt>
+                          <dd>참고용 범위</dd>
+                        </div>
+                      </dl>
+                    )}
+
+                    <p className="prediction-uncertainty" id="prediction-help">
+                      실제 용량은 영상의 움직임과 색 변화에 따라 달라질 수 있어요.
+                    </p>
+
+                    {mode === "Advanced" && (
+                      <details className="prediction-assumptions">
+                        <summary>계산 기준과 한계</summary>
+                        <p>
+                          영상 메타데이터와 현재 설정을 사용하며, 원본 파일 크기는
+                          약한 복잡도 신호로만 반영해요. 프레임을 미리 분석하거나
+                          변환하지 않습니다.
+                        </p>
+                        <p>
+                          반복 횟수는 파일 크기를 늘리지 않아요. GIF 디더링과 색상
+                          분석 방식은 실측 보정값으로만 반영해 영상마다 결과
+                          순서가 달라질 수 있어요. 목표 용량 탐색에서는 일반
+                          비교에 예상 중심값, 보수적 비교에 범위 상한을 사용할 수
+                          있어요. 모델{" "}
+                          {OUTPUT_SIZE_MODEL_VERSION}
+                        </p>
+                        {sizeEstimate.capped && (
+                          <p>
+                            이 값은 모델의 최대 표시 한도에 닿아 후보끼리 직접
+                            비교하기 어려워요.
+                          </p>
+                        )}
+                      </details>
+                    )}
+
+                    {sizeEstimate.sizeClass !== "normal" && (
+                      <div className="prediction-large-warning">
+                        <strong>
+                          {sizeEstimate.sizeClass === "very-large"
+                            ? "파일이 매우 커질 수 있어요"
+                            : "용량이 큰 편이에요"}
+                        </strong>
+                        <p>
+                          길이, FPS 또는 최대 너비를 낮추면 용량을 줄일 수 있어요.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="prediction-label" id="prediction-title">
+                      예상 결과 용량
+                    </p>
+                    <p className="prediction-value">
+                      예상 용량을 계산할 수 없어요
+                    </p>
+                    <p className="prediction-uncertainty" id="prediction-help">
+                      영상 정보를 확인하지 못했어요. 변환 후 실제 용량은 확인할
+                      수 있습니다.
+                    </p>
+                  </>
+                )}
+              </section>
+
               {error && (
                 <div className="error-message" role="alert">
                   <span aria-hidden="true">!</span>
@@ -1228,7 +1418,7 @@ export default function Home() {
               )}
 
               {settingsError && !isActive && (
-                <div className="settings-warning" role="status">
+                <div className="settings-warning">
                   <span aria-hidden="true">i</span>
                   <p>{settingsError}</p>
                 </div>

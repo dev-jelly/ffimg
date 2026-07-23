@@ -156,6 +156,18 @@ test("the unbundled FFmpeg worker is preserved and selected at runtime", async (
     "application does not pass the custom worker URL",
   );
   assert.ok(
+    applicationBundles[0].source.includes("예상 결과 용량"),
+    "application bundle does not contain the prediction UI",
+  );
+  assert.ok(
+    applicationBundles[0].source.includes("영상의 움직임과 색 변화"),
+    "application bundle does not contain uncertainty guidance",
+  );
+  assert.ok(
+    applicationBundles[0].source.includes("ffimg-size-v1"),
+    "application bundle does not contain the estimator model version",
+  );
+  assert.ok(
     javascript.includes(`${pagesBasePath}/_next/`),
     "webpack public path does not include the repository base path",
   );

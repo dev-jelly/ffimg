@@ -69,6 +69,34 @@ test("source includes both formats, all modes, and conversion recovery actions",
   assert.match(page, /role="alert"/);
 });
 
+test("source progressively discloses Korean output-size predictions", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /estimateOutputSize/);
+  assert.match(page, /예상 결과 용량/);
+  assert.match(page, /계산 중/);
+  assert.match(page, /설정을 확인해 주세요/);
+  assert.match(page, /\) : settingsError \? \(/);
+  assert.match(page, /예상 용량을 계산할 수 없어요/);
+  assert.match(page, /실제 용량은 영상의 움직임과 색 변화에 따라 달라질 수 있어요/);
+  assert.match(page, /용량이 큰 편이에요/);
+  assert.match(page, /파일이 매우 커질 수 있어요/);
+  assert.match(page, /길이, FPS 또는 최대 너비를 낮추면/);
+  assert.match(
+    page,
+    /mode !== "Beginner"[\s\S]*className="prediction-metrics"/,
+  );
+  assert.match(
+    page,
+    /mode === "Advanced"[\s\S]*className="prediction-assumptions"/,
+  );
+  assert.match(page, /OUTPUT_SIZE_MODEL_VERSION/);
+  assert.match(page, /window\.setTimeout\([\s\S]*500/);
+  assert.match(page, /announcedPrediction/);
+  assert.equal(page.match(/role="status"/g)?.length, 1);
+  assert.match(page, /role="status" aria-live="polite" aria-atomic="true"/);
+});
+
 test("starter preview and starter assets are removed", async () => {
   const [packageJson, layout, css] = await Promise.all([
     readFile(new URL("../package.json", import.meta.url), "utf8"),
