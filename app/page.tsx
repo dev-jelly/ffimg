@@ -695,9 +695,11 @@ export default function Home() {
       removeProgressListener?.();
       if (engine) {
         await unmountLocalFile(engine.ffmpeg, VIRTUAL_FILES.input);
-        try {
-          await engine.ffmpeg.deleteFile(VIRTUAL_FILES.palette);
-        } catch {}
+        if (format === "gif") {
+          try {
+            await engine.ffmpeg.deleteFile(VIRTUAL_FILES.palette);
+          } catch {}
+        }
         engine.dispose();
       }
       if (engineRef.current === engine) engineRef.current = null;

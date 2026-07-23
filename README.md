@@ -4,6 +4,8 @@
 애플리케이션입니다. 원본 바이트와 FFmpeg 작업은 사용자 브라우저 안에만
 머물며, 업로드·계정·영구 저장소·분석 도구를 사용하지 않습니다.
 
+공개 버전은 <https://dev-jelly.github.io/ffimg/>에서 사용할 수 있습니다.
+
 ## 실행
 
 Node.js 22.13 이상이 필요합니다.
@@ -18,11 +20,21 @@ npm run dev
 ```bash
 npm run lint
 npm test
+npm run test:pages
 ```
+
+`npm run build:pages`는 GitHub Pages의 `/ffimg` 하위 경로에 맞춘 완전한
+정적 사이트를 `out/`에 만듭니다. 기존 `npm run build`의
+vinext/Vite/Sites 출력은 그대로 유지됩니다.
+
+`main` 브랜치에 푸시하면 GitHub Actions가 두 빌드의 검사와 Pages 정적
+내보내기를 실행하고 `out/`만 배포합니다. 저장소의 Pages 소스는
+**GitHub Actions**로 설정해야 합니다.
 
 ## 변환 구조
 
-- `@ffmpeg/ffmpeg` 브라우저 래퍼를 애플리케이션 번들에 포함합니다.
+- `@ffmpeg/ffmpeg` 브라우저 래퍼를 애플리케이션 번들에 포함하고, 동적
+  Core 로딩을 보존한 공식 ESM Worker를 앱과 함께 제공합니다.
 - 첫 변환 시 단일 스레드 `@ffmpeg/core` 0.12.10 JavaScript와 WASM을
   CDN에서 내려받아 Blob URL로 로드합니다.
 - APNG는 FFmpeg APNG 인코더를 사용합니다.

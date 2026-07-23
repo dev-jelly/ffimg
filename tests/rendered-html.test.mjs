@@ -48,6 +48,10 @@ test("server-renders the finished Korean converter", async () => {
     html,
     /<meta(?=[^>]*\bproperty="og:image")(?=[^>]*\bcontent="http:\/\/localhost\/og\.png")[^>]*>/i,
   );
+  assert.match(
+    html,
+    /<link(?=[^>]*\brel="icon")(?=[^>]*\bhref="http:\/\/localhost\/favicon\.ico")[^>]*>/i,
+  );
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Codex is working/);
 });
 
@@ -80,7 +84,6 @@ test("starter preview and starter assets are removed", async () => {
   await Promise.all(
     [
       "app/_sites-preview",
-      "public/favicon.svg",
       "public/file.svg",
       "public/globe.svg",
       "public/window.svg",
@@ -89,4 +92,6 @@ test("starter preview and starter assets are removed", async () => {
     ),
   );
   await access(new URL("public/og.png", projectRoot));
+  await access(new URL("public/favicon.svg", projectRoot));
+  await access(new URL("public/favicon.ico", projectRoot));
 });

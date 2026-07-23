@@ -11,6 +11,10 @@ in the user's browser. This notice is informational and is not legal advice.
 - Source: https://github.com/ffmpegwasm/ffmpeg.wasm
 - License text: https://github.com/ffmpegwasm/ffmpeg.wasm/blob/main/LICENSE
 
+The files in `public/ffmpeg/` are exact copies of the ESM Worker runtime from
+`@ffmpeg/ffmpeg` 0.12.15. They are served without bundler transformation so the
+verified Blob URL for the FFmpeg Core can be imported at runtime.
+
 ## ffmpeg.wasm core
 
 - Package: `@ffmpeg/core`

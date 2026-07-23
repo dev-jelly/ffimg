@@ -33,6 +33,11 @@ function toHex(bytes: ArrayBuffer) {
   ).join("");
 }
 
+function getClassWorkerUrl() {
+  const basePath = document.documentElement.dataset.basePath ?? "";
+  return new URL(`${basePath}/ffmpeg/worker.js`, window.location.origin).href;
+}
+
 async function fetchVerifiedBlob(
   url: string,
   mimeType: string,
@@ -165,6 +170,7 @@ export async function loadBrowserFfmpeg({
     onProgress({ ratio: 0.92, label: "변환 엔진을 준비하는 중" });
     await ffmpeg.load(
       {
+        classWorkerURL: getClassWorkerUrl(),
         coreURL: coreUrl,
         wasmURL: wasmUrl,
       },

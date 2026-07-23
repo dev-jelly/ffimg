@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Exact MIT-licensed files vendored from @ffmpeg/ffmpeg.
+    "public/ffmpeg/**",
   ]),
 ]);
 
