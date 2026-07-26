@@ -4,7 +4,6 @@ import {
   buildApngCommand,
   buildGifCommands,
   loopArguments,
-  MAX_OUTPUT_DURATION,
   normalizeSettings,
   outputFileFor,
   safeDownloadName,
@@ -111,16 +110,14 @@ test("trim start always leaves a convertible slice of known media", () => {
   assert.equal(settings.duration, 0.1);
 });
 
-test("every mode has a hard animated-image duration budget", () => {
+test("duration follows the source length when known and is uncapped otherwise", () => {
   for (const mode of ["Intermediate", "Advanced"]) {
-    const settings = normalizeSettings(
-      {
-        mode,
-        duration: 600,
-      },
-      undefined,
-    );
-    assert.equal(settings.duration, MAX_OUTPUT_DURATION);
+    const bounded = normalizeSettings({ mode, duration: 600 }, 10);
+    assert.ok(bounded.duration <= 10);
+    assert.ok(bounded.duration > 0);
+
+    const openEnded = normalizeSettings({ mode, duration: 600 }, undefined);
+    assert.equal(openEnded.duration, 600);
   }
 });
 

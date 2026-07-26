@@ -11,7 +11,6 @@ import {
 import {
   buildApngCommand,
   buildGifCommands,
-  MAX_OUTPUT_DURATION,
   normalizeSettings,
   outputFileFor,
   safeDownloadName,
@@ -64,14 +63,8 @@ const SUPPORTED_EXTENSIONS = new Set([
   "mpeg",
   "ogv",
 ]);
-const MAX_FILE_SIZE = 500 * 1024 * 1024;
-const LARGE_FILE_WARNING_SIZE = 200 * 1024 * 1024;
-const MAX_FRAME_COUNT = 600;
-const MAX_FRAME_PIXELS = 921_600;
-const MAX_TOTAL_PIXELS = {
-  apng: 32_000_000,
-  gif: 64_000_000,
-} as const;
+const MAX_FILE_SIZE = 1024 * 1024 * 1024;
+const LARGE_FILE_WARNING_SIZE = 700 * 1024 * 1024;
 const ACTIVE_PHASES = new Set<Phase>([
   "loading",
   "preparing",
@@ -284,26 +277,6 @@ export default function Home() {
       sizeBytes: file?.size,
     },
   });
-  const estimatedOutput =
-    sizeEstimate.status === "available" ? sizeEstimate.output : null;
-  const outputWidth =
-    estimatedOutput?.width ??
-    (metadata?.width
-      ? Math.min(normalized.width, metadata.width)
-      : normalized.width);
-  const outputHeight =
-    estimatedOutput?.height ??
-    (metadata?.width && metadata.height
-      ? Math.max(
-          2,
-          Math.round(((outputWidth * metadata.height) / metadata.width) / 2) *
-            2,
-        )
-      : outputWidth);
-  const frameCount =
-    estimatedOutput?.frameCount ?? normalized.fps * normalized.duration;
-  const framePixels = outputWidth * outputHeight;
-  const totalPixels = framePixels * frameCount;
   const settingsError = (() => {
     if (mode !== "Beginner") {
       if (!Number.isFinite(start) || start < 0) {
@@ -315,12 +288,8 @@ export default function Home() {
       ) {
         return "시작 위치와 변환 길이가 원본 영상 범위를 벗어났어요.";
       }
-      if (
-        !Number.isFinite(duration) ||
-        duration < 0.1 ||
-        duration > MAX_OUTPUT_DURATION
-      ) {
-        return `변환 길이는 0.1초부터 ${MAX_OUTPUT_DURATION}초까지 입력해 주세요.`;
+      if (!Number.isFinite(duration) || duration < 0.1) {
+        return "변환 길이는 0.1초 이상으로 입력해 주세요.";
       }
     }
     if (mode === "Advanced") {
@@ -344,21 +313,9 @@ export default function Home() {
       ) {
         return "APNG 압축은 0-9 사이의 정수로 입력해 주세요.";
       }
-      if (
-        sourceDuration === null &&
-        (width > 480 || fps > 12 || duration > 10)
-      ) {
-        return "영상 정보를 확인할 수 없을 때는 480px · 12 FPS · 10초 이하로 설정해 주세요.";
+      if (sourceDuration === null && (width > 480 || fps > 12)) {
+        return "영상 정보를 확인할 수 없을 때는 480px · 12 FPS 이하로 설정해 주세요.";
       }
-    }
-    if (frameCount > MAX_FRAME_COUNT) {
-      return `현재 설정은 약 ${Math.ceil(frameCount)}프레임이에요. FPS나 길이를 낮춰 600프레임 이하로 맞춰 주세요.`;
-    }
-    if (framePixels > MAX_FRAME_PIXELS) {
-      return "출력 한 프레임이 너무 커요. 최대 너비를 낮춰 약 1280×720 이하로 맞춰 주세요.";
-    }
-    if (totalPixels > MAX_TOTAL_PIXELS[format]) {
-      return `${format === "apng" ? "움직이는 PNG" : "GIF"}가 브라우저 메모리 한도를 넘을 수 있어요. 길이, FPS 또는 너비를 낮춰 주세요.`;
     }
     return null;
   })();
@@ -426,7 +383,7 @@ export default function Home() {
       return "내용이 없는 파일이에요. 다른 동영상 파일을 선택해 주세요.";
     }
     if (nextFile.size > MAX_FILE_SIZE) {
-      return "파일이 500MB보다 커요. 브라우저 메모리를 위해 더 짧거나 작은 동영상으로 다시 시도해 주세요.";
+      return "파일이 1GB보다 커요. 더 짧거나 작은 동영상으로 다시 시도해 주세요.";
     }
     const extension = fileExtension(nextFile.name);
     if (!nextFile.type.startsWith("video/") && !SUPPORTED_EXTENSIONS.has(extension)) {
@@ -446,7 +403,7 @@ export default function Home() {
 
     const largeFileWarning =
       nextFile.size > LARGE_FILE_WARNING_SIZE
-        ? "200MB가 넘는 큰 파일이에요. 모바일에서는 메모리가 부족할 수 있으니 짧은 구간부터 변환해 보세요."
+        ? "큰 파일이에요. 길거나 고해상도로 변환하면 모바일에서 메모리가 부족할 수 있어요."
         : null;
     const operation = operationRef.current + 1;
     operationRef.current = operation;
@@ -866,7 +823,7 @@ export default function Home() {
               </span>
               <strong>동영상을 여기에 놓아주세요</strong>
               <span>또는 눌러서 파일 선택</span>
-              <small>MP4, MOV, WebM 등 · 최대 500MB</small>
+              <small>MP4, MOV, WebM 등 · 최대 1GB</small>
             </button>
             {error && (
               <div className="error-message upload-error" role="alert">
@@ -1093,7 +1050,7 @@ export default function Home() {
                         max={
                           metadata?.duration
                             ? Math.max(0, metadata.duration - 0.1)
-                            : MAX_OUTPUT_DURATION
+                            : undefined
                         }
                         step="0.1"
                         value={start}
@@ -1106,13 +1063,11 @@ export default function Home() {
                       <input
                         type="number"
                         min="0.1"
-                        max={Math.min(
-                          MAX_OUTPUT_DURATION,
-                          Math.max(
-                            0.1,
-                            (metadata?.duration ?? MAX_OUTPUT_DURATION) - start,
-                          ),
-                        )}
+                        max={
+                          metadata?.duration
+                            ? Math.max(0.1, metadata.duration - start)
+                            : undefined
+                        }
                         step="0.1"
                         value={duration}
                         onChange={(event) =>
@@ -1136,7 +1091,7 @@ export default function Home() {
                         max={
                           metadata?.duration
                             ? Math.max(0, metadata.duration - 0.1)
-                            : MAX_OUTPUT_DURATION
+                            : undefined
                         }
                         step="0.1"
                         value={start}
@@ -1149,13 +1104,11 @@ export default function Home() {
                       <input
                         type="number"
                         min="0.1"
-                        max={Math.min(
-                          MAX_OUTPUT_DURATION,
-                          Math.max(
-                            0.1,
-                            (metadata?.duration ?? MAX_OUTPUT_DURATION) - start,
-                          ),
-                        )}
+                        max={
+                          metadata?.duration
+                            ? Math.max(0.1, metadata.duration - start)
+                            : undefined
+                        }
                         step="0.1"
                         value={duration}
                         onChange={(event) =>

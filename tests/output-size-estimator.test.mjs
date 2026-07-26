@@ -236,6 +236,25 @@ test("duration, FPS, and unsaturated width never decrease either bound", () => {
   }
 });
 
+test("supports long source durations while keeping frame counts safe", () => {
+  const long = estimate(
+    { duration: 600, fps: 30 },
+    { durationSeconds: 600 },
+  );
+  assertBoundedAvailable(long);
+  assert.equal(long.output.frameCount, 18_000);
+
+  const unsafe = estimateOutputSize({
+    settings: {
+      ...settings(),
+      duration: Number.MAX_VALUE,
+    },
+    media: DEFAULT_MEDIA,
+  });
+  assert.equal(unsafe.status, "unavailable");
+  assert.equal(unsafe.reason, "invalid-input");
+});
+
 test("GIF colors increase smoothly while APNG compression decreases size", () => {
   let previousGif = estimate({ gifColors: 2 });
   for (const gifColors of [3, 16, 64, 128, 192, 256]) {
