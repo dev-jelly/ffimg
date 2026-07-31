@@ -1,5 +1,6 @@
 "use client";
 
+import { Banner } from "@astryxdesign/core/Banner";
 import {
   type ChangeEvent,
   type DragEvent,
@@ -1525,17 +1526,13 @@ export default function Home() {
         />
       </section>
 
-      <aside className="privacy-note" aria-label="개인정보 안내">
-        <span className="privacy-icon" aria-hidden="true">
-          ◉
-        </span>
-        <div>
-          <strong>내 영상은 내 기기에만</strong>
-          <p>
-            영상 파일은 서버로 전송하거나 저장하지 않습니다. 탭을 닫으면 변환
-            결과도 브라우저 메모리에서 사라져요.
-          </p>
-        </div>
+      <aside className="astryx-privacy-banner" aria-label="개인정보 안내">
+        <Banner
+          status="info"
+          title="내 영상은 내 기기에만"
+          description="영상 파일은 서버로 전송하거나 저장하지 않습니다. 탭을 닫으면 변환 결과도 브라우저 메모리에서 사라져요."
+          container="card"
+        />
       </aside>
 
       <footer>
