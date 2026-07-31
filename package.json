@@ -2,6 +2,9 @@
   "name": "ffimg",
   "version": "0.1.0",
   "private": true,
+  "astryx": {
+    "theme": "@astryxdesign/theme-neutral"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/dev-jelly/ffimg.git"
@@ -18,16 +21,21 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:pages": "npm run build:pages && node --test tests/pages/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "astryx": "node node_modules/@astryxdesign/cli/bin/astryx.mjs"
   },
   "dependencies": {
+    "@astryxdesign/core": "0.2.0",
+    "@astryxdesign/theme-neutral": "0.2.0",
     "@ffmpeg/ffmpeg": "0.12.15",
+    "@stylexjs/stylex": "0.19.0",
     "drizzle-orm": "0.45.2",
     "next": "16.2.11",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@astryxdesign/cli": "0.2.0",
     "@cloudflare/vite-plugin": "1.37.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",

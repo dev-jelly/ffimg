@@ -1,4 +1,12 @@
-@import "tailwindcss";
+@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "@astryxdesign/core/reset.css";
+@import "@astryxdesign/core/astryx.css";
+@import "@astryxdesign/theme-neutral/theme.css";
+@import "@astryxdesign/core/tailwind-theme.css";
+@import "tailwindcss/utilities.css" layer(utilities);
 
 :root {
   --canvas: #f3efe6;
@@ -1322,38 +1330,9 @@ fieldset:disabled label:not(.is-selected) {
   width: 100%;
 }
 
-.privacy-note {
-  display: flex;
+.astryx-privacy-banner {
   max-width: 760px;
-  align-items: flex-start;
-  gap: 14px;
   margin: 23px auto 0;
-  padding: 17px 20px;
-  border: 1px solid rgba(23, 107, 88, 0.2);
-  border-radius: 15px;
-  background: rgba(255, 253, 248, 0.65);
-}
-
-.privacy-icon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 10px;
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.privacy-note strong {
-  font-size: 0.78rem;
-}
-
-.privacy-note p {
-  margin: 4px 0 0;
-  color: var(--ink-soft);
-  font-size: 0.7rem;
-  line-height: 1.55;
 }
 
 footer {

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const title = "움짤공방 — 브라우저 동영상 APNG·GIF 변환기";
@@ -115,7 +116,9 @@ export default function RootLayout({
         process.env.FFIMG_PAGES_EXPORT === "1" ? "/ffimg" : undefined
       }
     >
-      <body>{children}</body>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
