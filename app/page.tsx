@@ -1,22 +1,29 @@
 "use client";
 
 import { Banner } from "@astryxdesign/core/Banner";
+import { Button } from "@astryxdesign/core/Button";
 import {
   type ChangeEvent,
   type DragEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import {
-  buildApngCommand,
-  buildGifCommands,
+  buildApngCommandFromResolved,
+  buildGifCommandsFromResolved,
   normalizeSettings,
   outputFileFor,
   safeDownloadName,
   VIRTUAL_FILES,
 } from "@/lib/ffmpeg-commands.mjs";
+import {
+  ADAPTIVE_PRESET_POLICY_VERSION,
+  recommendBeginnerDuration,
+  resolveAdaptivePreset,
+} from "@/lib/adaptive-presets.mjs";
 import {
   FFMPEG_CORE_NOTICE,
   loadBrowserFfmpeg,
@@ -32,7 +39,7 @@ import {
 
 type Format = "apng" | "gif";
 type Mode = "Beginner" | "Intermediate" | "Advanced";
-type Preset = "light" | "balanced" | "crisp";
+type Preset = "auto" | "light" | "balanced" | "crisp";
 type Phase =
   | "idle"
   | "inspecting"
@@ -51,6 +58,15 @@ type VideoMetadata = {
   width: number | null;
   height: number | null;
   previewAvailable: boolean;
+};
+
+type RecommendedEncodingSettings = {
+  fps: number;
+  width: number;
+  gifColors: number;
+  gifStats: string;
+  gifDither: string;
+  apngCompression: number;
 };
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -103,11 +119,11 @@ const MODE_COPY: Array<{
 const PRESET_COPY: Array<{
   id: Preset;
   name: string;
-  description: string;
 }> = [
-  { id: "light", name: "가볍게", description: "8 FPS · 최대 360px" },
-  { id: "balanced", name: "균형", description: "12 FPS · 최대 480px" },
-  { id: "crisp", name: "선명하게", description: "15 FPS · 최대 720px" },
+  { id: "auto", name: "자동 추천" },
+  { id: "light", name: "가볍게" },
+  { id: "balanced", name: "균형" },
+  { id: "crisp", name: "선명하게" },
 ];
 
 function formatBytes(bytes: number) {
@@ -142,6 +158,51 @@ function formatAspect(width: number | null, height: number | null) {
   if (!width || !height) return "확인 불가";
   const divisor = greatestCommonDivisor(width, height);
   return `${width / divisor}:${height / divisor}`;
+}
+
+function adaptiveRationale(reason: string) {
+  switch (reason) {
+    case "metadata-unavailable":
+      return "영상 정보를 확인하기 어려워 기본 추천값을 사용해요.";
+    case "long-duration":
+      return "영상이 길어 용량이 과해지지 않도록 프레임과 크기를 조절했어요.";
+    case "dense-source":
+      return "파일 정보량이 많아 선명도와 변환 부담의 균형을 맞췄어요.";
+    case "short-source":
+      return "짧은 영상이라 프레임과 크기를 더 살렸어요.";
+    case "light-source":
+      return "파일이 비교적 가벼워 해상도를 조금 높였어요.";
+    case "source-size":
+      return "원본 크기를 넘겨 키우지 않고 프레임을 살렸어요.";
+    default:
+      return "영상 길이와 해상도를 함께 보고 균형을 맞췄어요.";
+  }
+}
+
+function adaptiveRiskCopy(
+  risk?: { level: string; reason: string } | null,
+) {
+  if (!risk || risk.level === "low") return null;
+  if (risk.level === "unknown") {
+    return {
+      level: "unknown",
+      title: "기기 부담을 미리 확인하기 어려워요",
+      description:
+        "영상 정보를 읽지 못했어요. 긴 영상이라면 짧은 구간부터 시도해 주세요.",
+    };
+  }
+  if (risk.level === "medium" && risk.reason === "output-size") return null;
+  return {
+    level: risk.level,
+    title:
+      risk.level === "high"
+        ? "변환 부담이 큰 편이에요"
+        : "변환에 시간이 걸릴 수 있어요",
+    description:
+      risk.reason === "memory"
+        ? "브라우저 메모리를 많이 사용할 수 있어요. 길이, FPS 또는 크기를 낮추면 더 안정적이에요."
+        : "처리할 프레임이 많아요. 중급자 모드에서 길이를 줄이면 더 안정적이에요.",
+  };
 }
 
 function fileExtension(name: string) {
@@ -204,7 +265,7 @@ export default function Home() {
   );
   const [format, setFormat] = useState<Format>("gif");
   const [mode, setMode] = useState<Mode>("Beginner");
-  const [preset, setPreset] = useState<Preset>("balanced");
+  const [preset, setPreset] = useState<Preset>("auto");
   const [start, setStart] = useState(0);
   const [duration, setDuration] = useState(6);
   const [fps, setFps] = useState(12);
@@ -225,6 +286,7 @@ export default function Home() {
   const [reducedMotion, setReducedMotion] = useState(false);
   const [showResultPreview, setShowResultPreview] = useState(false);
   const [announcedPrediction, setAnnouncedPrediction] = useState("");
+  const [advancedDirty, setAdvancedDirty] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sourceUrlRef = useRef<string | null>(null);
@@ -237,47 +299,120 @@ export default function Home() {
   const resultHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const isActive = ACTIVE_PHASES.has(phase);
-  const normalized = normalizeSettings(
-    {
-      format,
-      mode,
-      preset,
-      start,
-      duration,
-      fps,
-      width,
-      plays,
-      gifColors,
-      gifStats,
-      gifDither,
-      apngCompression,
-    },
-    metadata?.duration ?? undefined,
-  );
-  const settingsFingerprint = [
-    format,
-    mode,
-    preset,
-    start,
-    duration,
-    fps,
-    width,
-    plays,
-    gifColors,
-    gifStats,
-    gifDither,
-    apngCompression,
-  ].join("|");
-  const sourceDuration = metadata?.duration ?? null;
-  const sizeEstimate = estimateOutputSize({
-    settings: normalized,
-    media: {
+  const controlsDisabled = isActive || phase === "inspecting";
+  const mediaProfile = useMemo(
+    () => ({
       durationSeconds: metadata?.duration,
       width: metadata?.width,
       height: metadata?.height,
       sizeBytes: file?.size,
-    },
-  });
+    }),
+    [file?.size, metadata?.duration, metadata?.height, metadata?.width],
+  );
+  const beginnerDuration = useMemo(
+    () => recommendBeginnerDuration(mediaProfile),
+    [mediaProfile],
+  );
+  const automaticRecommendation = useMemo(
+    () =>
+      resolveAdaptivePreset({
+        format,
+        mode: mode === "Advanced" ? "Intermediate" : mode,
+        preset: "auto",
+        media: mediaProfile,
+        trim: {
+          start: mode === "Beginner" ? 0 : start,
+          duration: mode === "Beginner" ? beginnerDuration : duration,
+        },
+      }),
+    [beginnerDuration, duration, format, mediaProfile, mode, start],
+  );
+  const intermediateRecommendations = useMemo(
+    () =>
+      Object.fromEntries(
+        PRESET_COPY.map((option) => [
+          option.id,
+          resolveAdaptivePreset({
+            format,
+            mode: "Intermediate",
+            preset: option.id,
+            media: mediaProfile,
+            trim: { start, duration },
+          }),
+        ]),
+      ),
+    [duration, format, mediaProfile, start],
+  );
+  const activeRecommendation =
+    mode === "Beginner"
+      ? automaticRecommendation
+      : mode === "Intermediate"
+        ? intermediateRecommendations[preset]
+        : null;
+  const recommendationWarning = adaptiveRiskCopy(activeRecommendation?.risk);
+  const advancedRecommendationMatches =
+    fps === automaticRecommendation.settings.fps &&
+    width === automaticRecommendation.settings.width &&
+    gifColors === automaticRecommendation.settings.gifColors &&
+    gifStats === automaticRecommendation.settings.gifStats &&
+    gifDither === automaticRecommendation.settings.gifDither &&
+    apngCompression === automaticRecommendation.settings.apngCompression;
+  const manualSettings = useMemo(
+    () =>
+      normalizeSettings(
+        {
+          format,
+          mode,
+          preset,
+          start,
+          duration,
+          fps,
+          width,
+          plays,
+          gifColors,
+          gifStats,
+          gifDither,
+          apngCompression,
+        },
+        metadata?.duration ?? undefined,
+      ),
+    [
+      apngCompression,
+      duration,
+      format,
+      fps,
+      gifColors,
+      gifDither,
+      gifStats,
+      metadata?.duration,
+      mode,
+      plays,
+      preset,
+      start,
+      width,
+    ],
+  );
+  const normalized = activeRecommendation?.settings ?? manualSettings;
+  const settingsFingerprint = [
+    ADAPTIVE_PRESET_POLICY_VERSION,
+    normalized.format,
+    normalized.mode,
+    normalized.preset,
+    normalized.start,
+    normalized.duration,
+    normalized.fps,
+    normalized.width,
+    normalized.plays,
+    normalized.gifColors,
+    normalized.gifStats,
+    normalized.gifDither,
+    normalized.apngCompression,
+  ].join("|");
+  const sourceDuration = metadata?.duration ?? null;
+  const sizeEstimate = useMemo(
+    () => estimateOutputSize({ settings: normalized, media: mediaProfile }),
+    [mediaProfile, normalized],
+  );
   const settingsError = (() => {
     if (mode !== "Beginner") {
       if (!Number.isFinite(start) || start < 0) {
@@ -379,6 +514,29 @@ export default function Home() {
     });
   }, [phase]);
 
+  function applyRecommendedEncoding(settings: RecommendedEncodingSettings) {
+    setFps(settings.fps);
+    setWidth(settings.width);
+    setGifColors(settings.gifColors);
+    setGifStats(settings.gifStats);
+    setGifDither(settings.gifDither);
+    setApngCompression(settings.apngCompression);
+  }
+
+  function handleModeChange(nextMode: Mode) {
+    setMode(nextMode);
+  }
+
+  function loadRecommendedSettings() {
+    applyRecommendedEncoding(automaticRecommendation.settings);
+    setAdvancedDirty(false);
+  }
+
+  function updateAdvancedSetting(update: () => void) {
+    setAdvancedDirty(true);
+    update();
+  }
+
   function validateFile(nextFile: File) {
     if (nextFile.size === 0) {
       return "내용이 없는 파일이에요. 다른 동영상 파일을 선택해 주세요.";
@@ -430,7 +588,17 @@ export default function Home() {
       const nextMetadata = await inspectVideo(nextUrl);
       if (operationRef.current !== operation) return;
       setMetadata(nextMetadata);
-      setDuration(Math.min(6, nextMetadata.duration ?? 6));
+      if (mode !== "Advanced" || !advancedDirty) {
+        setStart(0);
+        setDuration(
+          recommendBeginnerDuration({
+            durationSeconds: nextMetadata.duration,
+            width: nextMetadata.width,
+            height: nextMetadata.height,
+            sizeBytes: nextFile.size,
+          }),
+        );
+      }
     } catch {
       if (operationRef.current !== operation) return;
       setMetadata({
@@ -498,7 +666,7 @@ export default function Home() {
     setInspectionWarning(null);
     setFormat("gif");
     setMode("Beginner");
-    setPreset("balanced");
+    setPreset("auto");
     setStart(0);
     setDuration(6);
     setFps(12);
@@ -508,6 +676,7 @@ export default function Home() {
     setGifStats("diff");
     setGifDither("sierra2_4a");
     setApngCompression(6);
+    setAdvancedDirty(false);
     setProgress(0);
     setPhase("idle");
     setStageMessage("파일을 기다리고 있어요.");
@@ -564,7 +733,7 @@ export default function Home() {
       setProgress(20);
 
       if (format === "gif") {
-        const commands = buildGifCommands(normalized, metadata?.duration);
+        const commands = buildGifCommandsFromResolved(normalized);
         setPhase("palette");
         setStageMessage("GIF 색상표를 만들고 있어요.");
         removeProgressListener = setFfmpegProgressListener(
@@ -624,7 +793,7 @@ export default function Home() {
           },
         );
         const exitCode = await engine.ffmpeg.exec(
-          buildApngCommand(normalized, metadata?.duration),
+          buildApngCommandFromResolved(normalized),
           -1,
           { signal: controller.signal },
         );
@@ -692,7 +861,9 @@ export default function Home() {
   }
 
   const outputSummary =
-    format === "gif"
+    phase === "inspecting"
+      ? "추천 설정 계산 중"
+      : format === "gif"
       ? `${Number(normalized.duration.toFixed(1))}초, ${normalized.fps} FPS, ${normalized.width}px, ${normalized.gifColors}색`
       : `${Number(normalized.duration.toFixed(1))}초, ${normalized.fps} FPS, ${normalized.width}px, 압축 ${normalized.apngCompression}`;
   const predictionRangeText =
@@ -702,15 +873,44 @@ export default function Home() {
           sizeEstimate.rangeBytes.upper,
         )
       : null;
+  const recommendationLiveText =
+    file && metadata && mode !== "Advanced" && phase !== "inspecting"
+      ? `${
+          mode === "Beginner" || preset === "auto"
+            ? "자동 추천"
+            : `${PRESET_COPY.find((option) => option.id === preset)?.name} 프리셋`
+        }이 준비됐어요. ${
+          normalized.start > 0
+            ? `${Number(normalized.start.toFixed(1))}초부터 `
+            : "처음 "
+        }${Number(normalized.duration.toFixed(1))}초, ${normalized.fps} FPS, 최대 ${
+          sizeEstimate.output.width ?? normalized.width
+        }px로 설정했어요.`
+      : null;
+  const recommendationRiskLiveText = recommendationWarning
+    ? `${recommendationWarning.title} ${recommendationWarning.description}`
+    : null;
   const predictionLiveText =
     phase === "inspecting"
       ? "동영상 정보를 확인하고 예상 용량을 계산하는 중이에요."
       : settingsError
         ? "설정을 확인하면 예상 용량을 다시 계산할게요."
       : predictionRangeText
-        ? `예상 출력 용량은 ${predictionRangeText}예요.`
+          ? [
+            recommendationLiveText,
+            `예상 출력 용량은 ${predictionRangeText}예요.`,
+            recommendationRiskLiveText,
+          ]
+            .filter(Boolean)
+            .join(" ")
         : metadata
-          ? "영상 길이 또는 해상도를 확인할 수 없어 예상 용량을 계산할 수 없어요."
+          ? [
+              recommendationLiveText,
+              "영상 길이 또는 해상도를 확인할 수 없어 예상 용량을 계산할 수 없어요.",
+              recommendationRiskLiveText,
+            ]
+              .filter(Boolean)
+              .join(" ")
           : null;
 
   useEffect(() => {
@@ -736,15 +936,21 @@ export default function Home() {
   return (
     <main className="site-shell">
       <header className="site-header">
-        <a className="brand" href="#converter" aria-label="움짤공방 변환기로 이동">
-          <span className="brand-mark" aria-hidden="true">
-            F
-          </span>
-          <span>움짤공방</span>
+        <a className="brand" href="#converter" aria-label="핌쥐 변환기로 이동">
+          {/* A relative URL keeps this generated brand mark portable across Pages and Sites. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="brand-mark"
+            src="./pimg-mark.png"
+            alt=""
+            width="40"
+            height="40"
+          />
+          <span>핌쥐</span>
         </a>
         <span className="local-badge">
           <span aria-hidden="true">●</span>
-          Browser only
+          브라우저에서만
         </span>
       </header>
 
@@ -928,7 +1134,7 @@ export default function Home() {
                 <span className="summary-chip">{outputSummary}</span>
               </div>
 
-              <fieldset className="format-fieldset" disabled={isActive}>
+              <fieldset className="format-fieldset" disabled={controlsDisabled}>
                 <legend>파일 형식</legend>
                 <div className="format-options">
                   <label className={format === "apng" ? "is-selected" : ""}>
@@ -962,7 +1168,7 @@ export default function Home() {
                 </div>
               </fieldset>
 
-              <fieldset className="mode-fieldset" disabled={isActive}>
+              <fieldset className="mode-fieldset" disabled={controlsDisabled}>
                 <legend>경험 수준</legend>
                 <div className="mode-options">
                   {MODE_COPY.map((option) => (
@@ -975,7 +1181,7 @@ export default function Home() {
                         name="mode"
                         value={option.name}
                         checked={mode === option.name}
-                        onChange={() => setMode(option.name)}
+                        onChange={() => handleModeChange(option.name)}
                       />
                       <span>
                         {option.label}
@@ -999,21 +1205,39 @@ export default function Home() {
                     ✦
                   </span>
                   <div>
-                    <strong>알아서 균형 있게 만들게요</strong>
-                    <p>처음부터 최대 6초를 균형 설정으로 변환해요.</p>
+                    <strong>
+                      {phase === "inspecting"
+                        ? "영상에 맞는 설정을 찾는 중이에요"
+                        : file
+                          ? "이 영상에 맞춰 조정했어요"
+                          : "파일을 고르면 맞춰 드릴게요"}
+                    </strong>
+                    <p>
+                      {file
+                        ? adaptiveRationale(automaticRecommendation.rationale)
+                        : "영상 길이와 해상도에 따라 프레임과 크기가 달라져요."}
+                    </p>
                   </div>
                   <dl>
                     <div>
                       <dt>속도</dt>
-                      <dd>12 FPS</dd>
+                      <dd>
+                        {phase === "inspecting"
+                          ? "계산 중"
+                          : `${normalized.fps} FPS`}
+                      </dd>
                     </div>
                     <div>
                       <dt>크기</dt>
-                      <dd>최대 480px</dd>
+                      <dd>
+                        {phase === "inspecting"
+                          ? "계산 중"
+                          : `최대 ${automaticRecommendation.output.width}px`}
+                      </dd>
                     </div>
                     <div>
                       <dt>반복</dt>
-                      <dd>계속</dd>
+                      <dd>{phase === "inspecting" ? "계산 중" : "계속"}</dd>
                     </div>
                   </dl>
                 </div>
@@ -1021,26 +1245,47 @@ export default function Home() {
 
               {mode === "Intermediate" && (
                 <div className="disclosed-controls">
-                  <fieldset className="preset-fieldset" disabled={isActive}>
+                  <fieldset
+                    className="preset-fieldset"
+                    disabled={controlsDisabled}
+                  >
                     <legend>품질 프리셋</legend>
                     <div className="preset-options">
-                      {PRESET_COPY.map((option) => (
-                        <label
-                          key={option.id}
-                          className={preset === option.id ? "is-selected" : ""}
-                        >
-                          <input
-                            type="radio"
-                            name="preset"
-                            value={option.id}
-                            checked={preset === option.id}
-                            onChange={() => setPreset(option.id)}
-                          />
-                          <strong>{option.name}</strong>
-                          <small>{option.description}</small>
-                        </label>
-                      ))}
+                      {PRESET_COPY.map((option) => {
+                        const recommendation =
+                          intermediateRecommendations[option.id];
+                        return (
+                          <label
+                            key={option.id}
+                            className={`${
+                              preset === option.id ? "is-selected " : ""
+                            }${option.id === "auto" ? "is-auto" : ""}`}
+                          >
+                            <input
+                              type="radio"
+                              name="preset"
+                              value={option.id}
+                              checked={preset === option.id}
+                              onChange={() => setPreset(option.id)}
+                            />
+                            <strong>{option.name}</strong>
+                            <small>
+                              {phase === "inspecting" ? (
+                                "영상 분석 중"
+                              ) : (
+                                <>
+                                  {recommendation.settings.fps} FPS / 최대{" "}
+                                  {recommendation.output.width}px
+                                </>
+                              )}
+                            </small>
+                          </label>
+                        );
+                      })}
                     </div>
+                    <p className="preset-help">
+                      프리셋 값은 영상 길이와 크기에 따라 달라져요.
+                    </p>
                   </fieldset>
                   <div className="control-grid two-columns">
                     <label>
@@ -1056,7 +1301,7 @@ export default function Home() {
                         step="0.1"
                         value={start}
                         onChange={(event) => setStart(Number(event.target.value))}
-                        disabled={isActive}
+                        disabled={controlsDisabled}
                       />
                     </label>
                     <label>
@@ -1074,7 +1319,7 @@ export default function Home() {
                         onChange={(event) =>
                           setDuration(Number(event.target.value))
                         }
-                        disabled={isActive}
+                        disabled={controlsDisabled}
                       />
                     </label>
                   </div>
@@ -1083,6 +1328,37 @@ export default function Home() {
 
               {mode === "Advanced" && (
                 <div className="disclosed-controls advanced-controls">
+                  <section
+                    className="advanced-recommendation"
+                    aria-label="추천 설정"
+                  >
+                    <p>
+                      <strong>이 영상 추천</strong>
+                      <span>
+                        {phase === "inspecting" ? (
+                          "영상 분석 중"
+                        ) : (
+                          <>
+                            {automaticRecommendation.settings.fps} FPS / 최대{" "}
+                            {automaticRecommendation.output.width}px
+                          </>
+                        )}
+                      </span>
+                    </p>
+                    <Button
+                      label={
+                        advancedRecommendationMatches
+                          ? "추천값 적용됨"
+                          : advancedDirty
+                          ? "추천값으로 다시 설정"
+                          : "이 영상 추천값 불러오기"
+                      }
+                      variant="secondary"
+                      size="sm"
+                      onClick={loadRecommendedSettings}
+                      isDisabled={controlsDisabled || advancedRecommendationMatches}
+                    />
+                  </section>
                   <div className="control-grid three-columns">
                     <label>
                       <span>시작 <small>초</small></span>
@@ -1096,8 +1372,12 @@ export default function Home() {
                         }
                         step="0.1"
                         value={start}
-                        onChange={(event) => setStart(Number(event.target.value))}
-                        disabled={isActive}
+                        onChange={(event) =>
+                          updateAdvancedSetting(() =>
+                            setStart(Number(event.target.value)),
+                          )
+                        }
+                        disabled={controlsDisabled}
                       />
                     </label>
                     <label>
@@ -1113,17 +1393,23 @@ export default function Home() {
                         step="0.1"
                         value={duration}
                         onChange={(event) =>
-                          setDuration(Number(event.target.value))
+                          updateAdvancedSetting(() =>
+                            setDuration(Number(event.target.value)),
+                          )
                         }
-                        disabled={isActive}
+                        disabled={controlsDisabled}
                       />
                     </label>
                     <label>
                       <span>반복 <small>총 재생</small></span>
                       <select
                         value={plays}
-                        onChange={(event) => setPlays(Number(event.target.value))}
-                        disabled={isActive}
+                        onChange={(event) =>
+                          updateAdvancedSetting(() =>
+                            setPlays(Number(event.target.value)),
+                          )
+                        }
+                        disabled={controlsDisabled}
                       >
                         <option value="0">계속</option>
                         <option value="1">1회</option>
@@ -1140,8 +1426,12 @@ export default function Home() {
                         min="1"
                         max="30"
                         value={fps}
-                        onChange={(event) => setFps(Number(event.target.value))}
-                        disabled={isActive}
+                        onChange={(event) =>
+                          updateAdvancedSetting(() =>
+                            setFps(Number(event.target.value)),
+                          )
+                        }
+                        disabled={controlsDisabled}
                       />
                     </label>
                     <label>
@@ -1152,8 +1442,12 @@ export default function Home() {
                         max="1280"
                         step="10"
                         value={width}
-                        onChange={(event) => setWidth(Number(event.target.value))}
-                        disabled={isActive}
+                        onChange={(event) =>
+                          updateAdvancedSetting(() =>
+                            setWidth(Number(event.target.value)),
+                          )
+                        }
+                        disabled={controlsDisabled}
                       />
                     </label>
                     {format === "apng" && (
@@ -1166,9 +1460,11 @@ export default function Home() {
                           aria-describedby="apng-compression-help"
                           value={apngCompression}
                           onChange={(event) =>
-                            setApngCompression(Number(event.target.value))
+                            updateAdvancedSetting(() =>
+                              setApngCompression(Number(event.target.value)),
+                            )
                           }
-                          disabled={isActive}
+                          disabled={controlsDisabled}
                         />
                         <small className="field-help" id="apng-compression-help">
                           높을수록 파일은 작아지지만 변환은 느려져요.
@@ -1188,9 +1484,11 @@ export default function Home() {
                           aria-describedby="gif-colors-help"
                           value={gifColors}
                           onChange={(event) =>
-                            setGifColors(Number(event.target.value))
+                            updateAdvancedSetting(() =>
+                              setGifColors(Number(event.target.value)),
+                            )
                           }
-                          disabled={isActive}
+                          disabled={controlsDisabled}
                         />
                         <small className="field-help" id="gif-colors-help">
                           많을수록 색은 정확하고 파일은 커져요.
@@ -1201,8 +1499,12 @@ export default function Home() {
                         <select
                           value={gifStats}
                           aria-describedby="gif-stats-help"
-                          onChange={(event) => setGifStats(event.target.value)}
-                          disabled={isActive}
+                          onChange={(event) =>
+                            updateAdvancedSetting(() =>
+                              setGifStats(event.target.value),
+                            )
+                          }
+                          disabled={controlsDisabled}
                         >
                           <option value="diff">움직임 중심</option>
                           <option value="full">전체 프레임</option>
@@ -1216,8 +1518,12 @@ export default function Home() {
                         <select
                           value={gifDither}
                           aria-describedby="gif-dither-help"
-                          onChange={(event) => setGifDither(event.target.value)}
-                          disabled={isActive}
+                          onChange={(event) =>
+                            updateAdvancedSetting(() =>
+                              setGifDither(event.target.value),
+                            )
+                          }
+                          disabled={controlsDisabled}
                         >
                           <option value="sierra2_4a">Sierra (균형)</option>
                           <option value="floyd_steinberg">Floyd-Steinberg</option>
@@ -1359,6 +1665,17 @@ export default function Home() {
                     </p>
                   </>
                 )}
+                {recommendationWarning &&
+                  phase !== "inspecting" &&
+                  !settingsError && (
+                    <aside
+                      className={`prediction-performance-warning is-${recommendationWarning.level}`}
+                      aria-label="변환 부담 안내"
+                    >
+                      <strong>{recommendationWarning.title}</strong>
+                      <p>{recommendationWarning.description}</p>
+                    </aside>
+                  )}
               </section>
 
               {error && (
@@ -1536,7 +1853,7 @@ export default function Home() {
       </aside>
 
       <footer>
-        <span>움짤공방 · 로컬 브라우저 변환기</span>
+        <span>핌쥐 - 로컬 브라우저 변환기</span>
         <span>
             Powered by{" "}
             <a

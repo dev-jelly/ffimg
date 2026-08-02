@@ -36,7 +36,9 @@ test("server-renders the finished Korean converter", async () => {
 
   const html = await response.text();
   assert.match(html, /<html[^>]*\blang="ko"/i);
-  assert.match(html, /<title>움짤공방 — 브라우저 동영상 APNG·GIF 변환기<\/title>/);
+  assert.match(html, /<title>핌쥐 - 브라우저 동영상 APNG·GIF 변환기<\/title>/);
+  assert.match(html, /핌쥐 변환기로 이동/);
+  assert.match(html, /브라우저에서만/);
   assert.match(html, /동영상을 가볍게, 움직이는 이미지로/);
   assert.match(html, /파일은 업로드되지 않아요/);
   assert.match(html, /동영상을 여기에 놓아주세요/);
@@ -50,7 +52,7 @@ test("server-renders the finished Korean converter", async () => {
   );
   assert.match(
     html,
-    /<link(?=[^>]*\brel="icon")(?=[^>]*\bhref="http:\/\/localhost\/favicon\.ico")[^>]*>/i,
+    /<link(?=[^>]*\brel="icon")(?=[^>]*\bhref="http:\/\/localhost\/pimg-mark\.png")[^>]*>/i,
   );
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Codex is working/);
 });
@@ -63,6 +65,13 @@ test("source includes both formats, all modes, and conversion recovery actions",
   assert.match(page, /name: "Beginner"/);
   assert.match(page, /name: "Intermediate"/);
   assert.match(page, /name: "Advanced"/);
+  assert.match(page, /name: "자동 추천"/);
+  assert.match(page, /resolveAdaptivePreset/);
+  assert.match(page, /이 영상에 맞춰 조정했어요/);
+  assert.match(page, /추천값으로 다시 설정/);
+  assert.match(page, /추천값 적용됨/);
+  assert.match(page, /변환 부담이 큰 편이에요/);
+  assert.match(page, /이 준비됐어요/);
   assert.match(page, /변환 취소/);
   assert.match(page, /파일 내려받기/);
   assert.match(page, /처음부터/);
@@ -120,6 +129,8 @@ test("starter preview and starter assets are removed", async () => {
     ),
   );
   await access(new URL("public/og.png", projectRoot));
-  await access(new URL("public/favicon.svg", projectRoot));
+  await access(new URL("public/pimg-logo.png", projectRoot));
+  await access(new URL("public/pimg-mark.png", projectRoot));
+  await access(new URL("public/apple-touch-icon.png", projectRoot));
   await access(new URL("public/favicon.ico", projectRoot));
 });

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildApngCommand,
+  buildApngCommandFromResolved,
   buildGifCommands,
+  buildGifCommandsFromResolved,
   loopArguments,
   normalizeSettings,
   outputFileFor,
@@ -173,6 +175,33 @@ test("GIF uses a two-pass palette workflow with selected settings", () => {
   );
   assert.equal(valueAfter(commands.encode, "-loop"), "3");
   assert.equal(commands.encode.at(-1), VIRTUAL_FILES.gifOutput);
+});
+
+test("resolved adaptive settings reach both encoders without mode defaults replacing them", () => {
+  const resolved = {
+    format: "gif",
+    mode: "Beginner",
+    preset: "auto",
+    start: 0,
+    duration: 3,
+    fps: 24,
+    width: 1280,
+    plays: 0,
+    gifColors: 224,
+    gifStats: "full",
+    gifDither: "floyd_steinberg",
+    apngCompression: 8,
+  };
+  const gif = buildGifCommandsFromResolved(resolved);
+  const apng = buildApngCommandFromResolved(resolved);
+
+  assert.match(valueAfter(gif.palette, "-vf"), /fps=24/);
+  assert.match(valueAfter(gif.palette, "-vf"), /min\(1280,iw\)/);
+  assert.match(valueAfter(gif.palette, "-vf"), /max_colors=224/);
+  assert.match(valueAfter(gif.encode, "-filter_complex"), /floyd_steinberg/);
+  assert.match(valueAfter(apng, "-vf"), /fps=24/);
+  assert.match(valueAfter(apng, "-vf"), /min\(1280,iw\)/);
+  assert.equal(valueAfter(apng, "-compression_level"), "8");
 });
 
 test("total-play mapping follows each muxer", () => {

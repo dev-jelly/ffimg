@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Providers } from "./providers";
 import "./globals.css";
 
-const title = "움짤공방 — 브라우저 동영상 APNG·GIF 변환기";
+const title = "핌쥐 - 브라우저 동영상 APNG·GIF 변환기";
 const description =
   "동영상을 서버에 올리지 않고 브라우저 안에서 APNG 또는 GIF로 변환하세요.";
 const pagesUrl = "https://dev-jelly.github.io/ffimg/";
@@ -13,20 +13,23 @@ function createMetadata({
   canonical,
   socialImage,
   iconPath,
+  appleIconPath,
 }: {
   metadataBase?: URL;
   canonical?: string;
   socialImage?: string;
   iconPath: string;
+  appleIconPath: string;
 }): Metadata {
   return {
     metadataBase,
     title,
     description,
-    applicationName: "움짤공방",
+    applicationName: "핌쥐",
     alternates: canonical ? { canonical } : undefined,
     icons: {
       icon: iconPath,
+      apple: appleIconPath,
     },
     openGraph: {
       type: "website",
@@ -34,14 +37,14 @@ function createMetadata({
       url: canonical,
       title,
       description,
-      siteName: "움짤공방",
+      siteName: "핌쥐",
       images: socialImage
         ? [
             {
               url: socialImage,
               width: 1200,
-              height: 628,
-              alt: "움짤공방 — 동영상을 움직이는 이미지로 바꾸는 브라우저 변환기",
+              height: 630,
+              alt: "핌쥐 - 동영상을 움직이는 이미지로 바꾸는 브라우저 변환기",
             },
           ]
         : undefined,
@@ -61,7 +64,8 @@ export async function generateMetadata(): Promise<Metadata> {
       metadataBase: new URL(pagesUrl),
       canonical: pagesUrl,
       socialImage: pagesSocialImage,
-      iconPath: "/ffimg/favicon.ico",
+      iconPath: "/ffimg/pimg-mark.png",
+      appleIconPath: "/ffimg/apple-touch-icon.png",
     });
   }
 
@@ -94,7 +98,8 @@ export async function generateMetadata(): Promise<Metadata> {
   return createMetadata({
     metadataBase,
     socialImage,
-    iconPath: "/favicon.ico",
+    iconPath: "/pimg-mark.png",
+    appleIconPath: "/apple-touch-icon.png",
   });
 }
 

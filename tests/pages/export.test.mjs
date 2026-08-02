@@ -25,6 +25,8 @@ test("Pages export contains the converter and canonical metadata", async () => {
   await Promise.all([
     access(indexPath),
     access(path.join(outputRoot, "og.png")),
+    access(path.join(outputRoot, "pimg-mark.png")),
+    access(path.join(outputRoot, "apple-touch-icon.png")),
     access(path.join(outputRoot, "favicon.ico")),
   ]);
 
@@ -58,7 +60,7 @@ test("Pages export contains the converter and canonical metadata", async () => {
   }
   assert.match(
     html,
-    /<link(?=[^>]*\brel="icon")(?=[^>]*\bhref="\/ffimg\/favicon\.ico")[^>]*>/i,
+    /<link(?=[^>]*\brel="icon")(?=[^>]*\bhref="\/ffimg\/pimg-mark\.png")[^>]*>/i,
   );
 });
 
@@ -166,6 +168,10 @@ test("the unbundled FFmpeg worker is preserved and selected at runtime", async (
   assert.ok(
     applicationBundles[0].source.includes("ffimg-size-v1"),
     "application bundle does not contain the estimator model version",
+  );
+  assert.ok(
+    applicationBundles[0].source.includes("ffimg-adaptive-v1"),
+    "application bundle does not contain the adaptive preset policy",
   );
   assert.ok(
     javascript.includes(`${pagesBasePath}/_next/`),
