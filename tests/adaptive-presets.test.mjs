@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ADAPTIVE_PRESET_IDS,
   ADAPTIVE_PRESET_POLICY_VERSION,
   recommendBeginnerDuration,
   resolveAdaptivePreset,
@@ -35,9 +36,33 @@ test("short high-resolution media receives a substantially richer automatic pres
 
   assert.equal(recommendation.policyVersion, ADAPTIVE_PRESET_POLICY_VERSION);
   assert.equal(recommendation.intent, "crisp");
-  assert.ok(recommendation.settings.width >= 960);
+  assert.equal(recommendation.settings.width, 1280);
   assert.ok(recommendation.settings.fps >= 20);
   assert.equal(recommendation.rationale, "short-source");
+});
+
+test("the public recommendation ladder contains exactly five choices", () => {
+  assert.deepEqual(ADAPTIVE_PRESET_IDS, [
+    "auto",
+    "light",
+    "balanced",
+    "crisp",
+    "source",
+  ]);
+});
+
+test("ordinary 1080p media receives a less conservative automatic preset", () => {
+  const recommendation = resolve({
+    media: {
+      durationSeconds: 12,
+      width: 1920,
+      height: 1080,
+      sizeBytes: 30 * mebibyte,
+    },
+  });
+
+  assert.ok(recommendation.output.width >= 1080);
+  assert.ok(recommendation.settings.fps >= 10);
 });
 
 test("a long full-length source is reduced more than a short source", () => {
@@ -103,6 +128,7 @@ test("named intents preserve increasing quality headroom for the same file", () 
   const light = resolve({ media, preset: "light" });
   const balanced = resolve({ media, preset: "balanced" });
   const crisp = resolve({ media, preset: "crisp" });
+  const source = resolve({ media, preset: "source" });
   const lightDetail =
     light.output.width * light.output.height * light.settings.fps;
   const balancedDetail =
@@ -116,6 +142,145 @@ test("named intents preserve increasing quality headroom for the same file", () 
   assert.ok(balancedDetail <= crispDetail);
   assert.ok(light.settings.gifColors < balanced.settings.gifColors);
   assert.ok(balanced.settings.gifColors < crisp.settings.gifColors);
+  assert.ok(crisp.output.width <= source.output.width);
+  assert.equal(source.settings.gifColors, 256);
+});
+
+test("source-first keeps 1080p width while enforcing browser hard limits", () => {
+  const media = {
+    durationSeconds: 4,
+    width: 1920,
+    height: 1080,
+    sizeBytes: 12 * mebibyte,
+  };
+  const gif = resolve({ format: "gif", media, preset: "source" });
+  const apng = resolve({ format: "apng", media, preset: "source" });
+
+  for (const recommendation of [gif, apng]) {
+    assert.equal(recommendation.canConvert, true);
+    assert.equal(recommendation.output.width, 1920);
+    assert.ok(recommendation.settings.fps >= 12);
+    assert.ok(recommendation.risk.estimatedWorkingSetBytes < 384 * mebibyte);
+    assert.equal(recommendation.limitedBy, "output-size");
+  }
+  assert.ok(gif.estimate.rangeBytes.upper < 160 * mebibyte);
+  assert.ok(apng.estimate.rangeBytes.upper < 192 * mebibyte);
+});
+
+test("source-first retreats gradually for a very long conversion", () => {
+  const media = {
+    durationSeconds: 60,
+    width: 1920,
+    height: 1080,
+    sizeBytes: 120 * mebibyte,
+  };
+  const short = resolve({ media, duration: 4, preset: "source" });
+  const full = resolve({ media, duration: 60, preset: "source" });
+
+  assert.ok(full.output.width < short.output.width);
+  assert.ok(full.settings.fps < short.settings.fps);
+  assert.ok(full.estimate.rangeBytes.upper < 160 * mebibyte);
+  assert.notEqual(full.limitedBy, null);
+});
+
+test("source-first never upscales small media and preserves motion headroom", () => {
+  const recommendation = resolve({
+    preset: "source",
+    media: {
+      durationSeconds: 6,
+      width: 320,
+      height: 240,
+      sizeBytes: mebibyte,
+    },
+  });
+
+  assert.equal(recommendation.output.width, 320);
+  assert.equal(recommendation.settings.fps, 30);
+  assert.equal(recommendation.settings.gifColors, 256);
+  assert.equal(recommendation.limitedBy, null);
+  assert.equal(recommendation.canConvert, true);
+});
+
+test("source-first hard work caps cannot be loosened by complexity", () => {
+  const media = {
+    durationSeconds: 3,
+    width: 1920,
+    height: 1080,
+    sizeBytes: 64 * 1024,
+  };
+  const gif = resolve({ format: "gif", media, duration: 2.6, preset: "source" });
+  const apng = resolve({
+    format: "apng",
+    media,
+    duration: 2.3,
+    preset: "source",
+  });
+
+  assert.equal(gif.canConvert, true);
+  assert.equal(apng.canConvert, true);
+  assert.ok(gif.risk.workUnits <= 320_000_000);
+  assert.ok(apng.risk.workUnits <= 140_000_000);
+});
+
+test("source-first explicitly blocks conversion when no hard-safe candidate exists", () => {
+  const media = {
+    durationSeconds: 3600,
+    width: 3840,
+    height: 2160,
+    sizeBytes: 1024 * mebibyte,
+  };
+
+  for (const format of ["gif", "apng"]) {
+    const recommendation = resolve({
+      format,
+      media,
+      duration: 3600,
+      preset: "source",
+    });
+    assert.equal(recommendation.canConvert, false);
+    assert.equal(recommendation.risk.level, "high");
+    assert.equal(recommendation.risk.reason, "workload");
+    assert.notEqual(recommendation.limitedBy, null);
+  }
+});
+
+test("every convertible source-first result satisfies all hard caps", () => {
+  const fixtures = [
+    { duration: 0.8, width: 320, height: 240, sizeBytes: 128 * 1024 },
+    { duration: 2.6, width: 1920, height: 1080, sizeBytes: 64 * 1024 },
+    { duration: 4, width: 1920, height: 1080, sizeBytes: 12 * mebibyte },
+    { duration: 30, width: 3840, height: 2160, sizeBytes: 80 * mebibyte },
+    { duration: 600, width: 3840, height: 2160, sizeBytes: 512 * mebibyte },
+    { duration: 3600, width: 3840, height: 2160, sizeBytes: 1024 * mebibyte },
+  ];
+
+  for (const format of ["gif", "apng"]) {
+    const workCap = format === "gif" ? 320_000_000 : 140_000_000;
+    const upperCap = (format === "gif" ? 160 : 192) * mebibyte;
+    for (const fixture of fixtures) {
+      const recommendation = resolve({
+        format,
+        preset: "source",
+        duration: fixture.duration,
+        media: {
+          durationSeconds: fixture.duration,
+          width: fixture.width,
+          height: fixture.height,
+          sizeBytes: fixture.sizeBytes,
+        },
+      });
+
+      if (!recommendation.canConvert) {
+        assert.equal(recommendation.risk.level, "high");
+        continue;
+      }
+      assert.ok(recommendation.risk.workUnits <= workCap);
+      assert.ok(recommendation.estimate.rangeBytes.upper < upperCap);
+      assert.ok(
+        recommendation.risk.estimatedWorkingSetBytes < 384 * mebibyte,
+      );
+    }
+  }
 });
 
 test("portrait and low-resolution sources are never upscaled past their source width", () => {
@@ -171,6 +336,20 @@ test("missing metadata has a deterministic, modest fallback", () => {
   assert.equal(first.settings.width, 480);
   assert.equal(first.settings.fps, 12);
   assert.equal(first.risk.level, "unknown");
+});
+
+test("source-first has a deterministic fallback without metadata", () => {
+  const recommendation = resolveAdaptivePreset({
+    format: "gif",
+    mode: "Intermediate",
+    preset: "source",
+  });
+
+  assert.equal(recommendation.settings.width, 720);
+  assert.equal(recommendation.settings.fps, 15);
+  assert.equal(recommendation.risk.level, "unknown");
+  assert.equal(recommendation.limitedBy, null);
+  assert.equal(recommendation.canConvert, true);
 });
 
 test("unsupported metadata extremes use the same safe fallback contract", () => {

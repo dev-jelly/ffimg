@@ -39,7 +39,7 @@ import {
 
 type Format = "apng" | "gif";
 type Mode = "Beginner" | "Intermediate" | "Advanced";
-type Preset = "auto" | "light" | "balanced" | "crisp";
+type Preset = "auto" | "light" | "balanced" | "crisp" | "source";
 type Phase =
   | "idle"
   | "inspecting"
@@ -119,11 +119,17 @@ const MODE_COPY: Array<{
 const PRESET_COPY: Array<{
   id: Preset;
   name: string;
+  description: string;
 }> = [
-  { id: "auto", name: "자동 추천" },
-  { id: "light", name: "가볍게" },
-  { id: "balanced", name: "균형" },
-  { id: "crisp", name: "선명하게" },
+  { id: "auto", name: "자동 추천", description: "이 영상에 맞춘 추천" },
+  { id: "light", name: "용량 작게", description: "공유하기 쉬운 작은 파일" },
+  { id: "balanced", name: "균형 있게", description: "화질과 용량의 균형" },
+  { id: "crisp", name: "더 선명하게", description: "글자와 디테일 우선" },
+  {
+    id: "source",
+    name: "원본 가깝게",
+    description: "도구 한도에서 원본 크기 우선",
+  },
 ];
 
 function formatBytes(bytes: number) {
@@ -141,6 +147,21 @@ function formatEstimatedRange(lowerBytes: number, upperBytes: number) {
   const lower = formatBytes(lowerBytes);
   const upper = formatBytes(upperBytes);
   return lower === upper ? `약 ${lower}` : `약 ${lower} - ${upper}`;
+}
+
+function formatPresetGeometry(width: number, height: number | null) {
+  return height ? `${width} × ${height}px` : `최대 ${width}px`;
+}
+
+function formatPresetEstimate(
+  estimate: { rangeBytes: { lower: number; upper: number } } | null,
+) {
+  return estimate
+    ? `예상 ${formatEstimatedRange(
+        estimate.rangeBytes.lower,
+        estimate.rangeBytes.upper,
+      )}`
+    : "예상 용량 확인 불가";
 }
 
 function formatDuration(duration: number | null) {
@@ -174,6 +195,8 @@ function adaptiveRationale(reason: string) {
       return "파일이 비교적 가벼워 해상도를 조금 높였어요.";
     case "source-size":
       return "원본 크기를 넘겨 키우지 않고 프레임을 살렸어요.";
+    case "source-limited":
+      return "원본에 가깝게 두되, 결과가 아주 커질 때만 자동으로 낮췄어요.";
     default:
       return "영상 길이와 해상도를 함께 보고 균형을 맞췄어요.";
   }
@@ -201,6 +224,8 @@ function adaptiveRiskCopy(
     description:
       risk.reason === "memory"
         ? "브라우저 메모리를 많이 사용할 수 있어요. 길이, FPS 또는 크기를 낮추면 더 안정적이에요."
+        : risk.reason === "output-size"
+          ? "결과 파일이 크게 나올 수 있어요. 예상 용량을 확인하고 필요하면 한 단계 낮춰 주세요."
         : "처리할 프레임이 많아요. 중급자 모드에서 길이를 줄이면 더 안정적이에요.",
   };
 }
@@ -414,6 +439,9 @@ export default function Home() {
     [mediaProfile, normalized],
   );
   const settingsError = (() => {
+    if (activeRecommendation?.canConvert === false) {
+      return "이 구간은 원본 가깝게 설정으로 처리하기 너무 커요. 변환 길이를 줄이거나 더 선명하게를 선택해 주세요.";
+    }
     if (mode !== "Beginner") {
       if (!Number.isFinite(start) || start < 0) {
         return "시작 위치는 0초 이상으로 입력해 주세요.";
@@ -432,8 +460,8 @@ export default function Home() {
       if (!Number.isInteger(fps) || fps < 1 || fps > 30) {
         return "프레임은 1-30 FPS 사이의 정수로 입력해 주세요.";
       }
-      if (!Number.isInteger(width) || width < 160 || width > 1280) {
-        return "최대 너비는 160-1280px 사이의 정수로 입력해 주세요.";
+      if (!Number.isInteger(width) || width < 160 || width > 1920) {
+        return "최대 너비는 160-1920px 사이의 정수로 입력해 주세요.";
       }
       if (
         format === "gif" &&
@@ -883,9 +911,10 @@ export default function Home() {
           normalized.start > 0
             ? `${Number(normalized.start.toFixed(1))}초부터 `
             : "처음 "
-        }${Number(normalized.duration.toFixed(1))}초, ${normalized.fps} FPS, 최대 ${
-          sizeEstimate.output.width ?? normalized.width
-        }px로 설정했어요.`
+        }${Number(normalized.duration.toFixed(1))}초, ${formatPresetGeometry(
+          sizeEstimate.output.width ?? normalized.width,
+          sizeEstimate.output.height,
+        )}, ${normalized.fps} FPS로 설정했어요.`
       : null;
   const recommendationRiskLiveText = recommendationWarning
     ? `${recommendationWarning.title} ${recommendationWarning.description}`
@@ -1249,11 +1278,22 @@ export default function Home() {
                     className="preset-fieldset"
                     disabled={controlsDisabled}
                   >
-                    <legend>품질 프리셋</legend>
+                    <legend>어떤 결과가 좋으세요?</legend>
                     <div className="preset-options">
                       {PRESET_COPY.map((option) => {
                         const recommendation =
                           intermediateRecommendations[option.id];
+                        const nameId = `preset-${option.id}-name`;
+                        const descriptionId = `preset-${option.id}-description`;
+                        const detailsId = `preset-${option.id}-details`;
+                        const estimateId = `preset-${option.id}-estimate`;
+                        const describedBy = [
+                          descriptionId,
+                          detailsId,
+                          file && phase !== "inspecting" ? estimateId : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" ");
                         return (
                           <label
                             key={option.id}
@@ -1267,24 +1307,50 @@ export default function Home() {
                               value={option.id}
                               checked={preset === option.id}
                               onChange={() => setPreset(option.id)}
+                              aria-labelledby={nameId}
+                              aria-describedby={describedBy}
                             />
-                            <strong>{option.name}</strong>
-                            <small>
-                              {phase === "inspecting" ? (
-                                "영상 분석 중"
-                              ) : (
-                                <>
-                                  {recommendation.settings.fps} FPS / 최대{" "}
-                                  {recommendation.output.width}px
-                                </>
-                              )}
+                            <strong id={nameId}>{option.name}</strong>
+                            {preset === option.id && (
+                              <small
+                                className="preset-selected-state"
+                                aria-hidden="true"
+                              >
+                                선택됨
+                              </small>
+                            )}
+                            <small
+                              className="preset-description"
+                              id={descriptionId}
+                            >
+                              {option.id === "auto" && file
+                                ? adaptiveRationale(recommendation.rationale)
+                                : option.description}
                             </small>
+                            <small className="preset-specs" id={detailsId}>
+                              {phase === "inspecting"
+                                ? "영상 분석 중"
+                                : !file
+                                  ? "파일을 고르면 계산"
+                                  : `${formatPresetGeometry(
+                                      recommendation.output.width,
+                                      recommendation.output.height,
+                                    )} · ${recommendation.settings.fps} FPS`}
+                            </small>
+                            {file && phase !== "inspecting" && (
+                              <small className="preset-estimate" id={estimateId}>
+                                {recommendation.canConvert === false
+                                  ? "구간을 줄여야 해요"
+                                  : formatPresetEstimate(recommendation.estimate)}
+                              </small>
+                            )}
                           </label>
                         );
                       })}
                     </div>
                     <p className="preset-help">
-                      프리셋 값은 영상 길이와 크기에 따라 달라져요.
+                      영상과 선택한 구간에 따라 해상도, FPS와 예상 용량이 달라져요.
+                      원본 가깝게는 용량이나 변환 부담이 클 때 자동으로 낮춰요.
                     </p>
                   </fieldset>
                   <div className="control-grid two-columns">
@@ -1439,7 +1505,7 @@ export default function Home() {
                       <input
                         type="number"
                         min="160"
-                        max="1280"
+                        max="1920"
                         step="10"
                         value={width}
                         onChange={(event) =>

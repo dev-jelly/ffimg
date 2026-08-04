@@ -149,6 +149,7 @@ test("reports missing and invalid essential inputs without synthetic bytes", () 
     { ...settings(), duration: Number.NaN },
     { ...settings(), fps: 31 },
     { ...settings(), width: 159 },
+    { ...settings(), width: 1921 },
     { ...settings(), gifColors: 257 },
     { ...settings(), gifStats: "single" },
     { ...settings(), gifDither: "unknown" },
@@ -171,7 +172,7 @@ test("keeps tiny, portrait, extreme-aspect, and maximum inputs bounded", () => {
     ),
     estimate({}, { width: 1080, height: 1920 }),
     estimate(
-      { width: 1280 },
+      { width: 1920 },
       {
         width: 2,
         height: OUTPUT_SIZE_ESTIMATOR_LIMITS.maximumSourceDimension,
@@ -182,12 +183,12 @@ test("keeps tiny, portrait, extreme-aspect, and maximum inputs bounded", () => {
         format: "apng",
         duration: 30,
         fps: 30,
-        width: 1280,
+        width: 1920,
         apngCompression: 0,
       },
       {
         durationSeconds: 30,
-        width: 1280,
+        width: 1920,
         height: OUTPUT_SIZE_ESTIMATOR_LIMITS.maximumSourceDimension,
         sizeBytes: Number.MAX_VALUE,
       },
@@ -208,8 +209,9 @@ test("keeps tiny, portrait, extreme-aspect, and maximum inputs bounded", () => {
 });
 
 test("matches FFmpeg width saturation and even aspect-preserving height", () => {
-  const saturated = estimate({ width: 1280 }, { width: 321, height: 181 });
+  const saturated = estimate({ width: 1920 }, { width: 321, height: 181 });
   const scaled = estimate({ width: 480 }, { width: 1920, height: 1080 });
+  const fullHd = estimate({ width: 1920 }, { width: 1920, height: 1080 });
 
   assert.deepEqual(saturated.output, {
     width: 321,
@@ -219,6 +221,11 @@ test("matches FFmpeg width saturation and even aspect-preserving height", () => 
   assert.deepEqual(scaled.output, {
     width: 480,
     height: 270,
+    frameCount: 48,
+  });
+  assert.deepEqual(fullHd.output, {
+    width: 1920,
+    height: 1080,
     frameCount: 48,
   });
 });
@@ -489,7 +496,7 @@ test("locks versioned default GIF and APNG fixtures", () => {
   const gif = estimate({ format: "gif" });
   const apng = estimate({ format: "apng" });
 
-  assert.equal(OUTPUT_SIZE_MODEL_VERSION, "ffimg-size-v1");
+  assert.equal(OUTPUT_SIZE_MODEL_VERSION, "ffimg-size-v2");
   assert.deepEqual(gif.rangeBytes, {
     lower: 6605,
     likely: 372551,

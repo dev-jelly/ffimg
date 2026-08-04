@@ -783,43 +783,74 @@ fieldset > legend {
 
 .preset-options {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .preset-options label {
   position: relative;
   display: grid;
-  min-height: 64px;
-  align-content: center;
-  padding: 8px;
+  min-height: 112px;
+  align-content: start;
+  gap: 3px;
+  padding: 12px;
   border: 1px solid var(--control-line);
   border-radius: 10px;
   background: var(--paper);
-  text-align: center;
+  text-align: left;
   cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .preset-options label.is-selected {
   border-color: var(--green);
+  background: var(--green-soft);
   box-shadow: inset 0 0 0 1px var(--green);
 }
 
 .preset-options label.is-auto {
   grid-column: 1 / -1;
-  min-height: 56px;
-  padding-inline: 12px;
-  text-align: left;
+  min-height: 104px;
 }
 
 .preset-options strong {
-  font-size: 0.73rem;
+  padding-right: 54px;
+  font-size: 0.78rem;
 }
 
 .preset-options small {
-  margin-top: 3px;
+  display: block;
   color: var(--ink-soft);
   font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.preset-options .preset-selected-state {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: var(--green);
+  font-size: 0.64rem;
+  font-weight: 850;
+}
+
+.preset-options .preset-description {
+  min-height: 1.9em;
+  color: var(--ink-soft);
+}
+
+.preset-options .preset-specs {
+  margin-top: 4px;
+  color: var(--ink);
+  font-weight: 780;
+}
+
+.preset-options .preset-estimate {
+  color: var(--green);
+  font-weight: 760;
 }
 
 .preset-help {
@@ -1542,7 +1573,7 @@ footer a {
   }
 
   .preset-options label {
-    min-height: 52px;
+    min-height: 96px;
   }
 
   .advanced-recommendation {

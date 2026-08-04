@@ -166,11 +166,11 @@ test("the unbundled FFmpeg worker is preserved and selected at runtime", async (
     "application bundle does not contain uncertainty guidance",
   );
   assert.ok(
-    applicationBundles[0].source.includes("ffimg-size-v1"),
+    applicationBundles[0].source.includes("ffimg-size-v2"),
     "application bundle does not contain the estimator model version",
   );
   assert.ok(
-    applicationBundles[0].source.includes("ffimg-adaptive-v1"),
+    applicationBundles[0].source.includes("ffimg-adaptive-v2"),
     "application bundle does not contain the adaptive preset policy",
   );
   assert.ok(

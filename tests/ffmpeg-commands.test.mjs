@@ -44,11 +44,12 @@ test("Beginner uses a short, balanced, decision-light configuration", () => {
   );
 });
 
-test("Intermediate expands all three presets and preserves bounded trim", () => {
+test("Intermediate expands all four named presets and preserves bounded trim", () => {
   const expected = {
     light: [8, 360, 96],
     balanced: [12, 480, 128],
     crisp: [15, 720, 192],
+    source: [20, 1280, 256],
   };
 
   for (const [preset, values] of Object.entries(expected)) {
@@ -96,6 +97,9 @@ test("Advanced invalid numbers and boundaries are clamped", () => {
   assert.equal(settings.gifStats, "diff");
   assert.equal(settings.gifDither, "sierra2_4a");
   assert.equal(settings.apngCompression, 0);
+
+  const maximum = normalizeSettings({ mode: "Advanced", width: 9999 });
+  assert.equal(maximum.width, 1920);
 });
 
 test("trim start always leaves a convertible slice of known media", () => {
@@ -185,7 +189,7 @@ test("resolved adaptive settings reach both encoders without mode defaults repla
     start: 0,
     duration: 3,
     fps: 24,
-    width: 1280,
+    width: 1920,
     plays: 0,
     gifColors: 224,
     gifStats: "full",
@@ -196,11 +200,11 @@ test("resolved adaptive settings reach both encoders without mode defaults repla
   const apng = buildApngCommandFromResolved(resolved);
 
   assert.match(valueAfter(gif.palette, "-vf"), /fps=24/);
-  assert.match(valueAfter(gif.palette, "-vf"), /min\(1280,iw\)/);
+  assert.match(valueAfter(gif.palette, "-vf"), /min\(1920,iw\)/);
   assert.match(valueAfter(gif.palette, "-vf"), /max_colors=224/);
   assert.match(valueAfter(gif.encode, "-filter_complex"), /floyd_steinberg/);
   assert.match(valueAfter(apng, "-vf"), /fps=24/);
-  assert.match(valueAfter(apng, "-vf"), /min\(1280,iw\)/);
+  assert.match(valueAfter(apng, "-vf"), /min\(1920,iw\)/);
   assert.equal(valueAfter(apng, "-compression_level"), "8");
 });
 

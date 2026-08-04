@@ -66,6 +66,17 @@ test("source includes both formats, all modes, and conversion recovery actions",
   assert.match(page, /name: "Intermediate"/);
   assert.match(page, /name: "Advanced"/);
   assert.match(page, /name: "자동 추천"/);
+  assert.match(page, /name: "용량 작게"/);
+  assert.match(page, /name: "균형 있게"/);
+  assert.match(page, /name: "더 선명하게"/);
+  assert.match(page, /name: "원본 가깝게"/);
+  assert.match(page, /어떤 결과가 좋으세요/);
+  assert.match(page, /formatPresetEstimate/);
+  assert.match(page, /max="1920"/);
+  assert.match(page, /aria-labelledby=\{nameId\}/);
+  assert.match(page, /aria-describedby=\{describedBy\}/);
+  assert.match(page, /canConvert === false/);
+  assert.match(page, /변환 길이를 줄이거나 더 선명하게를 선택해 주세요/);
   assert.match(page, /resolveAdaptivePreset/);
   assert.match(page, /이 영상에 맞춰 조정했어요/);
   assert.match(page, /추천값으로 다시 설정/);
