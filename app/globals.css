@@ -462,6 +462,16 @@ a {
   color: transparent;
 }
 
+.fps-probe {
+  position: fixed;
+  top: -10000px;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .preview-placeholder p {
   margin: 12px 0 0;
   font-size: 0.78rem;
@@ -522,7 +532,7 @@ a {
 
 .metadata-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   margin: 0;
   border: 1px solid var(--line);
   border-radius: 13px;
@@ -549,6 +559,13 @@ a {
   margin: 4px 0 0;
   font-size: 0.78rem;
   font-weight: 820;
+}
+
+.metadata-note {
+  margin: 8px 2px 0;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  line-height: 1.45;
 }
 
 .settings-panel {
@@ -858,6 +875,25 @@ fieldset > legend {
   color: var(--ink-soft);
   font-size: 0.72rem;
   line-height: 1.45;
+}
+
+.fps-selector {
+  margin-bottom: 15px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.fps-selector-note {
+  margin: 8px 0 0;
+  color: #7b5212;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.advanced-fps-selector {
+  margin-bottom: 15px;
 }
 
 .advanced-recommendation {
@@ -1539,6 +1575,18 @@ footer a {
 
   .panel-heading {
     margin-bottom: 16px;
+  }
+
+  .metadata-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .metadata-grid > div:nth-child(3) {
+    border-left: 0;
+  }
+
+  .metadata-grid > div:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
   }
 
   .settings-heading {

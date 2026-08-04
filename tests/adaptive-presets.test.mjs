@@ -14,6 +14,7 @@ function resolve({
   preset = "auto",
   media,
   duration = media?.durationSeconds,
+  fpsTarget,
 }) {
   return resolveAdaptivePreset({
     format,
@@ -21,6 +22,7 @@ function resolve({
     preset,
     media,
     trim: { start: 0, duration },
+    fpsTarget,
   });
 }
 
@@ -199,6 +201,77 @@ test("source-first never upscales small media and preserves motion headroom", ()
   assert.equal(recommendation.settings.gifColors, 256);
   assert.equal(recommendation.limitedBy, null);
   assert.equal(recommendation.canConvert, true);
+});
+
+test("known source FPS bounds every intent and source-first preserves it", () => {
+  const media = {
+    durationSeconds: 2,
+    width: 320,
+    height: 240,
+    sizeBytes: 512 * 1024,
+    fps: 59.94,
+  };
+  const source = resolve({ preset: "source", media });
+  const automatic = resolve({ preset: "auto", media });
+  const crisp = resolve({ preset: "crisp", media });
+
+  assert.equal(source.settings.fps, 59.94);
+  assert.ok(automatic.settings.fps <= 30);
+  assert.ok(crisp.settings.fps <= 30);
+  for (const recommendation of [source, automatic, crisp]) {
+    assert.ok(recommendation.settings.fps <= media.fps);
+  }
+});
+
+test("exact fractional source FPS and explicit targets are preserved", () => {
+  const media = {
+    durationSeconds: 2,
+    width: 320,
+    height: 240,
+    sizeBytes: 512 * 1024,
+    fps: 23.976,
+  };
+  assert.equal(resolve({ preset: "source", media }).settings.fps, 23.976);
+
+  const targeted = resolve({
+    preset: "source",
+    media: { ...media, fps: 59.94 },
+    fpsTarget: 29.97,
+  });
+  assert.equal(targeted.settings.fps, 29.97);
+});
+
+test("an explicit FPS choice overrides named preset FPS caps", () => {
+  const media = {
+    durationSeconds: 2,
+    width: 640,
+    height: 360,
+    sizeBytes: 512 * 1024,
+    fps: 59.94,
+  };
+
+  for (const preset of ["light", "balanced", "crisp", "source"]) {
+    const recommendation = resolve({ preset, media, fpsTarget: 59.94 });
+    assert.equal(recommendation.settings.fps, 59.94);
+  }
+
+  const sourceBound = resolve({
+    preset: "balanced",
+    media: { ...media, fps: 23.976 },
+    fpsTarget: 60,
+  });
+  assert.equal(sourceBound.settings.fps, 23.976);
+});
+
+test("an explicit FPS choice is retained when source metadata is unavailable", () => {
+  const recommendation = resolveAdaptivePreset({
+    format: "gif",
+    mode: "Intermediate",
+    preset: "balanced",
+    fpsTarget: 29.97,
+  });
+
+  assert.equal(recommendation.settings.fps, 29.97);
 });
 
 test("source-first hard work caps cannot be loosened by complexity", () => {

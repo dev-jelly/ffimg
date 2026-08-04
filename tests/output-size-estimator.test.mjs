@@ -147,7 +147,7 @@ test("reports missing and invalid essential inputs without synthetic bytes", () 
   for (const invalidSettings of [
     null,
     { ...settings(), duration: Number.NaN },
-    { ...settings(), fps: 31 },
+    { ...settings(), fps: 61 },
     { ...settings(), width: 159 },
     { ...settings(), width: 1921 },
     { ...settings(), gifColors: 257 },
@@ -241,6 +241,15 @@ test("duration, FPS, and unsaturated width never decrease either bound", () => {
     assert.ok(larger.rangeBytes.likely >= smaller.rangeBytes.likely);
     assert.ok(larger.rangeBytes.upper >= smaller.rangeBytes.upper);
   }
+});
+
+test("accepts decimal frame rates through 60 and counts fractional-rate frames", () => {
+  const result = estimate({ duration: 2, fps: 29.97 });
+  assertBoundedAvailable(result);
+  assert.equal(result.output.frameCount, 60);
+
+  const sixty = estimate({ duration: 2, fps: 60 });
+  assert.ok(sixty.rangeBytes.likely >= result.rangeBytes.likely);
 });
 
 test("supports long source durations while keeping frame counts safe", () => {

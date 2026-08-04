@@ -52,6 +52,23 @@ test("server-renders the finished Korean converter", async () => {
   );
   assert.match(
     html,
+    /<link(?=[^>]*\brel="canonical")(?=[^>]*\bhref="https:\/\/dev-jelly\.github\.io\/ffimg\/")[^>]*>/i,
+  );
+  assert.match(
+    html,
+    /<meta(?=[^>]*\bproperty="og:url")(?=[^>]*\bcontent="https:\/\/dev-jelly\.github\.io\/ffimg\/")[^>]*>/i,
+  );
+  assert.match(
+    html,
+    /<meta(?=[^>]*\bname="robots")(?=[^>]*\bcontent="[^"]*noindex[^"]*nofollow[^"]*")[^>]*>/i,
+  );
+  assert.match(html, /name="twitter:card" content="summary_large_image"/i);
+  assert.match(html, /name="twitter:image:alt" content="핌쥐 - 동영상을 움직이는 이미지로 바꾸는 브라우저 변환기"/i);
+  assert.match(html, /property="og:image:type" content="image\/png"/i);
+  assert.match(html, /property="og:image:width" content="1200"/i);
+  assert.match(html, /property="og:image:height" content="630"/i);
+  assert.match(
+    html,
     /<link(?=[^>]*\brel="icon")(?=[^>]*\bhref="http:\/\/localhost\/pimg-mark\.png")[^>]*>/i,
   );
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Codex is working/);
@@ -81,6 +98,17 @@ test("source includes both formats, all modes, and conversion recovery actions",
   assert.match(page, /이 영상에 맞춰 조정했어요/);
   assert.match(page, /추천값으로 다시 설정/);
   assert.match(page, /추천값 적용됨/);
+  assert.match(page, /원본 FPS/);
+  assert.match(page, /출력 FPS/);
+  assert.match(page, /requestVideoFrameCallback/);
+  assert.match(page, /presentedFrames/);
+  assert.match(page, /mediaTime/);
+  assert.match(page, /원본보다 높지 않은 표준 옵션/);
+  assert.match(page, /프리셋 추천 \(자동 계산\)/);
+  assert.match(page, /max="60"/);
+  assert.match(page, /step="0\.001"/);
+  assert.match(page, /23\.976, 29\.97, 59\.94/);
+  assert.match(page, /fpsTarget: selectedFpsTarget/);
   assert.match(page, /변환 부담이 큰 편이에요/);
   assert.match(page, /이 준비됐어요/);
   assert.match(page, /변환 취소/);

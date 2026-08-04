@@ -3,6 +3,10 @@
 import { Banner } from "@astryxdesign/core/Banner";
 import { Button } from "@astryxdesign/core/Button";
 import {
+  Selector,
+  type SelectorOptionType,
+} from "@astryxdesign/core/Selector";
+import {
   type ChangeEvent,
   type DragEvent,
   useCallback,
@@ -36,6 +40,11 @@ import {
   estimateOutputSize,
   OUTPUT_SIZE_MODEL_VERSION,
 } from "@/lib/output-size-estimator.mjs";
+import {
+  estimateFrameRateFromSamples,
+  formatFrameRate,
+  getSourceAwareFrameRateOptions,
+} from "@/lib/frame-rate.mjs";
 
 type Format = "apng" | "gif";
 type Mode = "Beginner" | "Intermediate" | "Advanced";
@@ -57,8 +66,11 @@ type VideoMetadata = {
   duration: number | null;
   width: number | null;
   height: number | null;
+  fps: number | null;
   previewAvailable: boolean;
 };
+
+type FpsPreference = "recommended" | `fps:${string}`;
 
 type RecommendedEncodingSettings = {
   fps: number;
@@ -128,7 +140,7 @@ const PRESET_COPY: Array<{
   {
     id: "source",
     name: "원본 가깝게",
-    description: "도구 한도에서 원본 크기 우선",
+    description: "도구 한도에서 원본 크기와 FPS 우선",
   },
 ];
 
@@ -169,6 +181,85 @@ function formatDuration(duration: number | null) {
   const minutes = Math.floor(duration / 60);
   const seconds = Math.floor(duration % 60);
   return minutes ? `${minutes}분 ${seconds}초` : `${seconds}초`;
+}
+
+function formatSourceFrameRate(fps: number | null) {
+  return fps ? `약 ${formatFrameRate(fps)} FPS` : "확인 불가";
+}
+
+function frameRatePreferenceValue(fps: number): FpsPreference {
+  return `fps:${formatFrameRate(fps)}`;
+}
+
+function frameRateFromPreference(preference: FpsPreference) {
+  if (preference === "recommended") return null;
+  const value = Number(preference.slice(4));
+  return Number.isFinite(value) && value >= 1 && value <= 60 ? value : null;
+}
+
+function createFrameRateSelectorOptions(
+  sourceFps: number | null,
+): SelectorOptionType[] {
+  const values = getSourceAwareFrameRateOptions(sourceFps);
+  const usableSourceFps = sourceFps ? Math.min(sourceFps, 60) : null;
+  const sourceValue = usableSourceFps
+    ? frameRatePreferenceValue(usableSourceFps)
+    : null;
+  const standardValues = values.filter(
+    (value) =>
+      !usableSourceFps || Math.abs(value - usableSourceFps) > 0.0005,
+  );
+  const groups = [
+    {
+      title: "저용량과 짧은 움직임",
+      values: standardValues.filter((value) => value <= 20),
+    },
+    {
+      title: "영화와 일반 영상",
+      values: standardValues.filter((value) => value > 20 && value <= 30),
+    },
+    {
+      title: "고프레임 영상",
+      values: standardValues.filter((value) => value > 30),
+    },
+  ];
+  const options: SelectorOptionType[] = [];
+
+  if (sourceValue && usableSourceFps) {
+    options.push({
+      value: sourceValue,
+      label:
+        sourceFps && sourceFps > 60
+          ? `도구 최대값 60 FPS (원본 약 ${formatFrameRate(sourceFps)} FPS)`
+          : `원본 측정값 (약 ${formatFrameRate(usableSourceFps)} FPS)`,
+    });
+  }
+  for (const group of groups) {
+    if (group.values.length === 0) continue;
+    options.push({
+      type: "section",
+      title: group.title,
+      options: group.values.map((value) => ({
+        value: frameRatePreferenceValue(value),
+        label: `${formatFrameRate(value)} FPS`,
+      })),
+    });
+  }
+  return options;
+}
+
+function fpsAdjustmentCopy(
+  sourceFps: number | null,
+  outputFps: number,
+  fallback: string,
+) {
+  if (!sourceFps) return fallback;
+  const source = formatFrameRate(sourceFps);
+  const output = formatFrameRate(outputFps);
+  if (Math.abs(sourceFps - outputFps) <= 0.05) {
+    return `원본과 비슷한 ${output} FPS를 유지해요.`;
+  }
+  return `예상 용량과 변환 부담을 줄이기 위해 원본 약 ${source} FPS를 ${output} FPS로 조정했어요.`;
 }
 
 function greatestCommonDivisor(a: number, b: number): number {
@@ -234,21 +325,74 @@ function fileExtension(name: string) {
   return name.split(".").pop()?.toLowerCase() ?? "";
 }
 
+function measureVideoFrameRate(video: HTMLVideoElement): Promise<number | null> {
+  if (typeof video.requestVideoFrameCallback !== "function") {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    const samples: Array<{ mediaTime: number; presentedFrames: number }> = [];
+    let callbackId: number | null = null;
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      video.removeEventListener("ended", finish);
+      if (callbackId !== null) video.cancelVideoFrameCallback(callbackId);
+      video.pause();
+      resolve(estimateFrameRateFromSamples(samples));
+    };
+    const collect: VideoFrameRequestCallback = (_now, frame) => {
+      samples.push({
+        mediaTime: frame.mediaTime,
+        presentedFrames: frame.presentedFrames,
+      });
+      const elapsed =
+        samples.length > 1
+          ? samples.at(-1)!.mediaTime - samples[0].mediaTime
+          : 0;
+      if ((samples.length >= 8 && elapsed >= 0.45) || samples.length >= 36) {
+        finish();
+        return;
+      }
+      callbackId = video.requestVideoFrameCallback(collect);
+    };
+    const timeoutId = window.setTimeout(finish, 2400);
+
+    video.addEventListener("ended", finish, { once: true });
+    callbackId = video.requestVideoFrameCallback(collect);
+    void video.play().catch(finish);
+  });
+}
+
 function inspectVideo(url: string): Promise<VideoMetadata> {
   return new Promise((resolve, reject) => {
     const video = document.createElement("video");
     const finish = () => {
+      video.onloadedmetadata = null;
+      video.onerror = null;
+      video.pause();
+      video.remove();
       video.removeAttribute("src");
       video.load();
     };
 
-    video.preload = "metadata";
+    video.preload = "auto";
     video.muted = true;
-    video.onloadedmetadata = () => {
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.tabIndex = -1;
+    video.className = "fps-probe";
+    video.setAttribute("aria-hidden", "true");
+    video.onloadedmetadata = async () => {
+      const fps = await measureVideoFrameRate(video);
       const metadata = {
         duration: Number.isFinite(video.duration) ? video.duration : null,
         width: video.videoWidth || null,
         height: video.videoHeight || null,
+        fps,
         previewAvailable: true,
       };
       finish();
@@ -258,6 +402,7 @@ function inspectVideo(url: string): Promise<VideoMetadata> {
       finish();
       reject(new Error("Browser preview unavailable"));
     };
+    document.body.append(video);
     video.src = url;
   });
 }
@@ -291,6 +436,8 @@ export default function Home() {
   const [format, setFormat] = useState<Format>("gif");
   const [mode, setMode] = useState<Mode>("Beginner");
   const [preset, setPreset] = useState<Preset>("auto");
+  const [fpsPreference, setFpsPreference] =
+    useState<FpsPreference>("recommended");
   const [start, setStart] = useState(0);
   const [duration, setDuration] = useState(6);
   const [fps, setFps] = useState(12);
@@ -331,8 +478,19 @@ export default function Home() {
       width: metadata?.width,
       height: metadata?.height,
       sizeBytes: file?.size,
+      frameRate: metadata?.fps,
     }),
-    [file?.size, metadata?.duration, metadata?.height, metadata?.width],
+    [
+      file?.size,
+      metadata?.duration,
+      metadata?.fps,
+      metadata?.height,
+      metadata?.width,
+    ],
+  );
+  const selectedFpsTarget = useMemo(
+    () => frameRateFromPreference(fpsPreference),
+    [fpsPreference],
   );
   const beginnerDuration = useMemo(
     () => recommendBeginnerDuration(mediaProfile),
@@ -363,10 +521,11 @@ export default function Home() {
             preset: option.id,
             media: mediaProfile,
             trim: { start, duration },
+            fpsTarget: selectedFpsTarget ?? undefined,
           }),
         ]),
       ),
-    [duration, format, mediaProfile, start],
+    [duration, format, mediaProfile, selectedFpsTarget, start],
   );
   const activeRecommendation =
     mode === "Beginner"
@@ -374,6 +533,38 @@ export default function Home() {
       : mode === "Intermediate"
         ? intermediateRecommendations[preset]
         : null;
+  const directFpsOptions = useMemo(
+    () => createFrameRateSelectorOptions(metadata?.fps ?? null),
+    [metadata?.fps],
+  );
+  const intermediateFpsOptions = useMemo<SelectorOptionType[]>(
+    () => [
+      {
+        value: "recommended",
+        label: "프리셋 추천 (자동 계산)",
+      },
+      ...directFpsOptions,
+    ],
+    [directFpsOptions],
+  );
+  const advancedFpsValue =
+    Number.isFinite(fps) && fps >= 1 && fps <= 60
+      ? frameRatePreferenceValue(fps)
+      : undefined;
+  const advancedFpsOptionValues = useMemo(
+    () =>
+      new Set(
+        directFpsOptions.flatMap((option) => {
+          if (typeof option === "string") return [];
+          if ("type" in option && option.type === "divider") return [];
+          if ("type" in option && option.type === "section") {
+            return option.options.map((item) => item.value);
+          }
+          return [option.value];
+        }),
+      ),
+    [directFpsOptions],
+  );
   const recommendationWarning = adaptiveRiskCopy(activeRecommendation?.risk);
   const advancedRecommendationMatches =
     fps === automaticRecommendation.settings.fps &&
@@ -457,8 +648,8 @@ export default function Home() {
       }
     }
     if (mode === "Advanced") {
-      if (!Number.isInteger(fps) || fps < 1 || fps > 30) {
-        return "프레임은 1-30 FPS 사이의 정수로 입력해 주세요.";
+      if (!Number.isFinite(fps) || fps < 1 || fps > 60) {
+        return "프레임은 1-60 FPS 사이로 입력해 주세요.";
       }
       if (!Number.isInteger(width) || width < 160 || width > 1920) {
         return "최대 너비는 160-1920px 사이의 정수로 입력해 주세요.";
@@ -606,11 +797,12 @@ export default function Home() {
     setSourceUrl(nextUrl);
     setFile(nextFile);
     setMetadata(null);
+    setFpsPreference("recommended");
     setInspectionWarning(largeFileWarning);
     setError(null);
     setProgress(0);
     setPhase("inspecting");
-    setStageMessage("동영상 정보를 확인하는 중이에요.");
+    setStageMessage("영상 정보와 원본 FPS를 확인하는 중이에요.");
 
     try {
       const nextMetadata = await inspectVideo(nextUrl);
@@ -633,6 +825,7 @@ export default function Home() {
         duration: null,
         width: null,
         height: null,
+        fps: null,
         previewAvailable: false,
       });
       setInspectionWarning(
@@ -695,6 +888,7 @@ export default function Home() {
     setFormat("gif");
     setMode("Beginner");
     setPreset("auto");
+    setFpsPreference("recommended");
     setStart(0);
     setDuration(6);
     setFps(12);
@@ -892,8 +1086,8 @@ export default function Home() {
     phase === "inspecting"
       ? "추천 설정 계산 중"
       : format === "gif"
-      ? `${Number(normalized.duration.toFixed(1))}초, ${normalized.fps} FPS, ${normalized.width}px, ${normalized.gifColors}색`
-      : `${Number(normalized.duration.toFixed(1))}초, ${normalized.fps} FPS, ${normalized.width}px, 압축 ${normalized.apngCompression}`;
+      ? `${Number(normalized.duration.toFixed(1))}초, ${formatFrameRate(normalized.fps)} FPS, ${normalized.width}px, ${normalized.gifColors}색`
+      : `${Number(normalized.duration.toFixed(1))}초, ${formatFrameRate(normalized.fps)} FPS, ${normalized.width}px, 압축 ${normalized.apngCompression}`;
   const predictionRangeText =
     sizeEstimate.status === "available" && !settingsError
       ? formatEstimatedRange(
@@ -914,14 +1108,14 @@ export default function Home() {
         }${Number(normalized.duration.toFixed(1))}초, ${formatPresetGeometry(
           sizeEstimate.output.width ?? normalized.width,
           sizeEstimate.output.height,
-        )}, ${normalized.fps} FPS로 설정했어요.`
+        )}, ${formatFrameRate(normalized.fps)} FPS로 설정했어요.`
       : null;
   const recommendationRiskLiveText = recommendationWarning
     ? `${recommendationWarning.title} ${recommendationWarning.description}`
     : null;
   const predictionLiveText =
     phase === "inspecting"
-      ? "동영상 정보를 확인하고 예상 용량을 계산하는 중이에요."
+      ? "영상 정보와 원본 FPS를 확인하고 예상 용량을 계산하는 중이에요."
       : settingsError
         ? "설정을 확인하면 예상 용량을 다시 계산할게요."
       : predictionRangeText
@@ -1143,6 +1337,14 @@ export default function Home() {
                   </dd>
                 </div>
                 <div>
+                  <dt>원본 FPS</dt>
+                  <dd title="브라우저에서 영상 프레임을 짧게 재생해 측정한 값">
+                    {phase === "inspecting"
+                      ? "측정 중"
+                      : formatSourceFrameRate(metadata?.fps ?? null)}
+                  </dd>
+                </div>
+                <div>
                   <dt>화면 비율</dt>
                   <dd>
                     {formatAspect(
@@ -1152,6 +1354,11 @@ export default function Home() {
                   </dd>
                 </div>
               </dl>
+              {metadata?.fps && (
+                <p className="metadata-note">
+                  원본 FPS는 브라우저가 영상 일부를 재생해 측정한 근사값이에요.
+                </p>
+              )}
             </section>
 
             <section className="settings-panel" aria-labelledby="settings-title">
@@ -1243,17 +1450,21 @@ export default function Home() {
                     </strong>
                     <p>
                       {file
-                        ? adaptiveRationale(automaticRecommendation.rationale)
+                        ? fpsAdjustmentCopy(
+                            metadata?.fps ?? null,
+                            automaticRecommendation.settings.fps,
+                            adaptiveRationale(automaticRecommendation.rationale),
+                          )
                         : "영상 길이와 해상도에 따라 프레임과 크기가 달라져요."}
                     </p>
                   </div>
                   <dl>
                     <div>
-                      <dt>속도</dt>
+                      <dt>출력 FPS</dt>
                       <dd>
                         {phase === "inspecting"
                           ? "계산 중"
-                          : `${normalized.fps} FPS`}
+                          : `${formatFrameRate(normalized.fps)} FPS`}
                       </dd>
                     </div>
                     <div>
@@ -1335,7 +1546,9 @@ export default function Home() {
                                   : `${formatPresetGeometry(
                                       recommendation.output.width,
                                       recommendation.output.height,
-                                    )} · ${recommendation.settings.fps} FPS`}
+                                    )} · ${formatFrameRate(
+                                      recommendation.settings.fps,
+                                    )} FPS`}
                             </small>
                             {file && phase !== "inspecting" && (
                               <small className="preset-estimate" id={estimateId}>
@@ -1349,10 +1562,38 @@ export default function Home() {
                       })}
                     </div>
                     <p className="preset-help">
-                      영상과 선택한 구간에 따라 해상도, FPS와 예상 용량이 달라져요.
-                      원본 가깝게는 용량이나 변환 부담이 클 때 자동으로 낮춰요.
+                      추천 FPS가 원본보다 낮다면 예상 용량과 브라우저 부담을
+                      줄이기 위해서예요. 아래에서 원본 기준이나 표준 FPS를 직접
+                      선택할 수 있어요.
                     </p>
                   </fieldset>
+                  <section className="fps-selector" aria-label="출력 FPS 설정">
+                    <Selector
+                      label="출력 FPS"
+                      description={
+                        phase === "inspecting"
+                          ? "원본 FPS를 측정한 뒤 선택 가능한 표준값을 보여드릴게요."
+                          : metadata?.fps
+                          ? `원본은 약 ${formatFrameRate(metadata.fps)} FPS예요. 원본보다 높지 않은 표준 옵션을 모두 보여줘요.`
+                          : "원본 FPS를 확인하지 못해 1-60 FPS 표준 옵션을 모두 보여줘요."
+                      }
+                      options={intermediateFpsOptions}
+                      value={fpsPreference}
+                      onChange={(value) =>
+                        setFpsPreference(value as FpsPreference)
+                      }
+                      size="md"
+                      width="100%"
+                      isDisabled={controlsDisabled}
+                      disabledMessage="영상 확인이나 변환이 끝난 뒤 바꿀 수 있어요."
+                    />
+                    {format === "gif" && normalized.fps >= 48 && (
+                      <p className="fps-selector-note">
+                        GIF는 50 FPS 이상에서 재생 간격이 조금 다르게 보일 수
+                        있어요.
+                      </p>
+                    )}
+                  </section>
                   <div className="control-grid two-columns">
                     <label>
                       <span>시작 위치 <small>초</small></span>
@@ -1405,7 +1646,9 @@ export default function Home() {
                           "영상 분석 중"
                         ) : (
                           <>
-                            {automaticRecommendation.settings.fps} FPS / 최대{" "}
+                            {formatFrameRate(
+                              automaticRecommendation.settings.fps,
+                            )} FPS / 최대{" "}
                             {automaticRecommendation.output.width}px
                           </>
                         )}
@@ -1424,6 +1667,51 @@ export default function Home() {
                       onClick={loadRecommendedSettings}
                       isDisabled={controlsDisabled || advancedRecommendationMatches}
                     />
+                  </section>
+                  <section
+                    className="fps-selector advanced-fps-selector"
+                    aria-label="FPS 빠른 선택"
+                  >
+                    <Selector
+                      label="FPS 빠른 선택"
+                      description={
+                        phase === "inspecting"
+                          ? "원본 FPS를 측정한 뒤 선택 가능한 표준값을 보여드릴게요."
+                          : metadata?.fps
+                          ? `원본 약 ${formatFrameRate(metadata.fps)} FPS 이하의 표준값을 바로 적용할 수 있어요.`
+                          : "1-60 FPS 표준값을 바로 적용하거나 아래에 직접 입력하세요."
+                      }
+                      options={directFpsOptions}
+                      value={
+                        advancedFpsValue &&
+                        advancedFpsOptionValues.has(advancedFpsValue)
+                          ? advancedFpsValue
+                          : undefined
+                      }
+                      placeholder={
+                        Number.isFinite(fps)
+                          ? `직접 입력 중 (${formatFrameRate(fps)} FPS)`
+                          : "표준 FPS 선택"
+                      }
+                      onChange={(value) => {
+                        const nextFps = frameRateFromPreference(
+                          value as FpsPreference,
+                        );
+                        if (nextFps !== null) {
+                          updateAdvancedSetting(() => setFps(nextFps));
+                        }
+                      }}
+                      size="md"
+                      width="100%"
+                      isDisabled={controlsDisabled}
+                      disabledMessage="영상 확인이나 변환이 끝난 뒤 바꿀 수 있어요."
+                    />
+                    {format === "gif" && fps >= 48 && (
+                      <p className="fps-selector-note">
+                        GIF는 50 FPS 이상에서 재생 간격이 조금 다르게 보일 수
+                        있어요.
+                      </p>
+                    )}
                   </section>
                   <div className="control-grid three-columns">
                     <label>
@@ -1486,11 +1774,13 @@ export default function Home() {
                       </select>
                     </label>
                     <label>
-                      <span>프레임 <small>FPS</small></span>
+                      <span>FPS 직접 입력 <small>1-60</small></span>
                       <input
                         type="number"
                         min="1"
-                        max="30"
+                        max="60"
+                        step="0.001"
+                        aria-describedby="fps-input-help"
                         value={fps}
                         onChange={(event) =>
                           updateAdvancedSetting(() =>
@@ -1499,6 +1789,9 @@ export default function Home() {
                         }
                         disabled={controlsDisabled}
                       />
+                      <small className="field-help" id="fps-input-help">
+                        23.976, 29.97, 59.94처럼 소수 FPS도 사용할 수 있어요.
+                      </small>
                     </label>
                     <label>
                       <span>최대 너비 <small>px</small></span>

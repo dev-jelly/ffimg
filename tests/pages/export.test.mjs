@@ -48,6 +48,29 @@ test("Pages export contains the converter and canonical metadata", async () => {
       "i",
     ),
   );
+  assert.match(
+    html,
+    /<meta(?=[^>]*\bname="robots")(?=[^>]*\bcontent="[^"]*index[^"]*follow[^"]*")[^>]*>/i,
+  );
+  assert.match(
+    html,
+    /<meta(?=[^>]*\bname="googlebot")(?=[^>]*\bcontent="[^"]*max-image-preview:large[^"]*")[^>]*>/i,
+  );
+  assert.match(html, /property="og:type" content="website"/i);
+  assert.match(html, /property="og:locale" content="ko_KR"/i);
+  assert.match(html, /property="og:site_name" content="핌쥐"/i);
+  assert.match(html, /property="og:image:type" content="image\/png"/i);
+  assert.match(html, /property="og:image:width" content="1200"/i);
+  assert.match(html, /property="og:image:height" content="630"/i);
+  assert.match(
+    html,
+    /property="og:image:alt" content="핌쥐 - 동영상을 움직이는 이미지로 바꾸는 브라우저 변환기"/i,
+  );
+  assert.match(html, /name="twitter:card" content="summary_large_image"/i);
+  assert.match(
+    html,
+    /name="twitter:image:alt" content="핌쥐 - 동영상을 움직이는 이미지로 바꾸는 브라우저 변환기"/i,
+  );
 
   for (const property of ["og:image", "twitter:image"]) {
     assert.match(
@@ -170,8 +193,16 @@ test("the unbundled FFmpeg worker is preserved and selected at runtime", async (
     "application bundle does not contain the estimator model version",
   );
   assert.ok(
-    applicationBundles[0].source.includes("ffimg-adaptive-v2"),
+    applicationBundles[0].source.includes("ffimg-adaptive-v3"),
     "application bundle does not contain the adaptive preset policy",
+  );
+  assert.ok(
+    applicationBundles[0].source.includes("원본 FPS"),
+    "application bundle does not contain source FPS metadata",
+  );
+  assert.ok(
+    applicationBundles[0].source.includes("requestVideoFrameCallback"),
+    "application bundle does not contain browser frame-rate sampling",
   );
   assert.ok(
     javascript.includes(`${pagesBasePath}/_next/`),

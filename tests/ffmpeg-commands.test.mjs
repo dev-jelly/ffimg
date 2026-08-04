@@ -90,7 +90,7 @@ test("Advanced invalid numbers and boundaries are clamped", () => {
 
   assert.equal(settings.start, 0);
   assert.equal(settings.duration, 3);
-  assert.equal(settings.fps, 30);
+  assert.equal(settings.fps, 60);
   assert.equal(settings.width, 160);
   assert.equal(settings.plays, 20);
   assert.equal(settings.gifColors, 2);
@@ -206,6 +206,22 @@ test("resolved adaptive settings reach both encoders without mode defaults repla
   assert.match(valueAfter(apng, "-vf"), /fps=24/);
   assert.match(valueAfter(apng, "-vf"), /min\(1920,iw\)/);
   assert.equal(valueAfter(apng, "-compression_level"), "8");
+});
+
+test("decimal frame rates survive normalization and both FFmpeg command paths", () => {
+  const resolved = {
+    mode: "Advanced",
+    start: 0,
+    duration: 2,
+    fps: 59.94,
+    width: 640,
+  };
+  const gif = buildGifCommandsFromResolved(resolved);
+  const apng = buildApngCommandFromResolved(resolved);
+
+  assert.equal(normalizeSettings(resolved).fps, 59.94);
+  assert.match(valueAfter(gif.palette, "-vf"), /^fps=59\.94,/);
+  assert.match(valueAfter(apng, "-vf"), /^fps=59\.94,/);
 });
 
 test("total-play mapping follows each muxer", () => {
