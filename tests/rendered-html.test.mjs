@@ -145,6 +145,33 @@ test("source progressively discloses Korean output-size predictions", async () =
   assert.match(page, /role="status" aria-live="polite" aria-atomic="true"/);
 });
 
+test("source keeps batch conversion and local history optional but complete", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const history = await readFile(
+    new URL("../lib/local-history.ts", import.meta.url),
+    "utf8",
+  );
+  const queue = await readFile(
+    new URL("../lib/batch-queue.mjs", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(page, /여러 버전 한 번에 만들기/);
+  assert.match(page, /가볍게 공유/);
+  assert.match(page, /핌쥐 추천/);
+  assert.match(page, /더 선명하게/);
+  assert.match(page, /최대 5개/);
+  assert.match(page, /2개씩 병렬 처리/);
+  assert.match(page, /최근 결과 모두 보기/);
+  assert.match(page, /미리보기/);
+  assert.match(page, /내려받기/);
+  assert.match(page, /최근 결과 모두 삭제/);
+  assert.match(history, /ffimg-result-history/);
+  assert.match(history, /entries/);
+  assert.match(history, /files/);
+  assert.match(queue, /Math\.min\(2/);
+});
+
 test("starter preview and starter assets are removed", async () => {
   const [packageJson, layout, css] = await Promise.all([
     readFile(new URL("../package.json", import.meta.url), "utf8"),

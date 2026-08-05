@@ -77,9 +77,25 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 video:focus-visible,
-label:has(input:focus-visible) {
+label:has(input:focus-visible),
+#settings-title:focus-visible,
+#batch-builder-title:focus-visible,
+.batch-job:focus-visible,
+.history-intro:focus-visible,
+.history-empty:focus-visible,
+.history-item:focus-visible {
   outline-color: var(--green);
   box-shadow: 0 0 0 3px var(--paper), 0 0 0 6px var(--green);
+}
+
+#settings-title,
+#batch-builder-title,
+.batch-job,
+.history-intro,
+.history-empty,
+.history-item {
+  outline: 2px solid transparent;
+  outline-offset: 3px;
 }
 
 button:disabled,
@@ -116,6 +132,42 @@ a {
   align-items: center;
   justify-content: space-between;
   min-height: 48px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-trigger {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.72);
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.history-trigger:hover {
+  border-color: var(--green);
+}
+
+.history-trigger strong {
+  display: grid;
+  min-width: 21px;
+  height: 21px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--green);
+  color: white;
+  font-size: 0.64rem;
 }
 
 .brand {
@@ -991,6 +1043,341 @@ fieldset:disabled label:not(.is-selected) {
   border-top: 1px solid var(--line);
 }
 
+.batch-entry-button {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 72px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 12px;
+  align-items: center;
+  margin-top: 16px;
+  padding: 13px 46px 13px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--paper-soft);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.batch-entry-button:hover {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+.batch-entry-button strong {
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.batch-entry-button span {
+  grid-column: 1;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.batch-entry-button i {
+  position: absolute;
+  right: 14px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--green);
+  color: white;
+  font-size: 1rem;
+  font-style: normal;
+}
+
+.batch-builder {
+  margin-top: 18px;
+  border-top: 1px solid var(--line-strong);
+  padding-top: 18px;
+}
+
+.batch-builder-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.batch-builder-heading h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 880;
+  letter-spacing: -0.04em;
+}
+
+.batch-builder-heading p:last-child {
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid rgba(23, 107, 88, 0.22);
+  border-radius: 11px;
+  background: var(--green-soft);
+}
+
+.batch-toolbar > p {
+  max-width: 330px;
+  margin: 0;
+  color: #315f52;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.batch-toolbar-actions,
+.batch-job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.batch-job-list {
+  margin: 16px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.batch-job {
+  border-bottom: 1px solid var(--line);
+}
+
+.batch-job .astryx-collapsible-trigger {
+  width: 100%;
+  padding: 13px 4px;
+}
+
+.batch-job .astryx-collapsible-content {
+  padding: 0 4px 16px;
+}
+
+.batch-job-trigger {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.batch-job-number {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--paper-soft);
+  color: var(--green);
+  font-size: 0.68rem;
+  font-weight: 880;
+}
+
+.batch-job-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.batch-job-copy strong,
+.batch-job-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-job-copy strong {
+  font-size: 0.76rem;
+}
+
+.batch-job-copy small {
+  color: var(--ink-soft);
+  font-size: 0.67rem;
+  font-weight: 650;
+}
+
+.batch-job-status {
+  color: var(--ink-soft);
+  font-size: 0.66rem;
+  font-weight: 820;
+}
+
+.batch-job-status.is-running {
+  color: #8a5b00;
+}
+
+.batch-job-status.is-complete {
+  color: var(--green);
+}
+
+.batch-job-status.is-failed {
+  color: var(--danger);
+}
+
+.batch-job-editor {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper-soft);
+}
+
+.batch-job-overview {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: var(--green);
+  font-size: 0.68rem;
+  font-weight: 820;
+}
+
+.batch-control-grid {
+  display: grid;
+  gap: 9px;
+}
+
+.batch-control-grid + .batch-control-grid {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.batch-control-grid.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.batch-control-grid.three-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.batch-control-grid.four-columns {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.batch-control-grid.one-column {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.batch-control-grid label > span {
+  display: flex;
+  min-height: 20px;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--ink);
+  font-size: 0.69rem;
+  font-weight: 780;
+}
+
+.batch-control-grid label > span small {
+  color: var(--ink-soft);
+  font-size: 0.64rem;
+}
+
+.batch-control-grid input,
+.batch-control-grid select {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 5px;
+  padding: 7px 9px;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.batch-job-progress {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.batch-job-progress progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--green);
+}
+
+.batch-job-progress span {
+  color: var(--ink-soft);
+  font-size: 0.67rem;
+}
+
+.batch-job-error {
+  margin: 10px 0 0;
+  color: var(--danger);
+  font-size: 0.69rem;
+  line-height: 1.5;
+}
+
+.batch-job-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.batch-empty {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+}
+
+.batch-empty strong {
+  font-size: 0.78rem;
+}
+
+.batch-empty p {
+  margin: 0 0 4px;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
+.batch-summary {
+  display: grid;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 13px 14px;
+  border-left: 3px solid var(--green);
+  background: var(--paper-soft);
+}
+
+.batch-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.74rem;
+}
+
+.batch-summary p,
+.batch-summary small {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
 .prediction-card {
   min-height: 104px;
   margin-top: 18px;
@@ -1456,6 +1843,191 @@ fieldset:disabled label:not(.is-selected) {
   width: 100%;
 }
 
+.history-view {
+  min-height: 260px;
+  padding: 0 20px 18px;
+}
+
+.history-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.history-intro p {
+  max-width: 470px;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.history-intro strong {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-size: 0.7rem;
+}
+
+.history-notice {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(200, 63, 36, 0.28);
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: #7f2c1d;
+}
+
+.history-notice > span {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-dark);
+  color: white;
+  font-size: 0.64rem;
+  font-weight: 850;
+}
+
+.history-notice p {
+  margin: 1px 0 0;
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.history-empty {
+  display: grid;
+  min-height: 260px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 30px;
+  text-align: center;
+}
+
+.history-empty-mark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 1.4rem;
+}
+
+.history-empty strong {
+  font-size: 0.84rem;
+}
+
+.history-empty p {
+  margin: 0 0 4px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-item {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.history-format-tile {
+  display: grid;
+  width: 54px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--paper-soft);
+  color: var(--green);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.history-item-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.history-item-copy strong,
+.history-item-copy span,
+.history-item-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-item-copy strong {
+  font-size: 0.76rem;
+}
+
+.history-item-copy span {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+}
+
+.history-item-copy small {
+  color: #6c655c;
+  font-size: 0.65rem;
+}
+
+.history-session-state {
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #fff3d8;
+  color: #7b5212;
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.history-item-actions,
+.history-delete-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.history-more {
+  display: flex;
+  justify-content: center;
+  padding-top: 14px;
+}
+
+.history-footer {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.history-footer p {
+  margin: 0 auto 0 0;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
 .astryx-privacy-banner {
   max-width: 760px;
   margin: 23px auto 0;
@@ -1519,6 +2091,21 @@ footer a {
   .local-badge {
     padding-inline: 9px;
     font-size: 0.62rem;
+  }
+
+  .header-actions {
+    gap: 5px;
+  }
+
+  .history-trigger {
+    min-height: 32px;
+    padding: 5px 6px 5px 9px;
+    font-size: 0.62rem;
+  }
+
+  .history-trigger strong {
+    min-width: 19px;
+    height: 19px;
   }
 
   .brand-mark {
@@ -1629,6 +2216,42 @@ footer a {
     flex-direction: column;
   }
 
+  .batch-builder-heading,
+  .batch-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .batch-toolbar > p {
+    max-width: none;
+  }
+
+  .batch-toolbar-actions > * {
+    flex: 1 1 auto;
+  }
+
+  .batch-control-grid.four-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .batch-control-grid.three-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .batch-job-trigger {
+    grid-template-columns: 26px minmax(0, 1fr);
+  }
+
+  .batch-job-status {
+    grid-column: 2;
+  }
+
+  .batch-summary > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
   .control-grid.three-columns {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1673,6 +2296,44 @@ footer a {
     min-height: 200px;
   }
 
+  .history-view {
+    padding-inline: 14px;
+  }
+
+  .history-intro {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .history-item {
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .history-format-tile {
+    width: 46px;
+    height: 44px;
+  }
+
+  .history-item-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .history-item-actions > * {
+    flex: 1 1 auto;
+  }
+
+  .history-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .history-footer p {
+    margin-right: 0;
+  }
+
   footer {
     align-items: center;
     flex-direction: column;
@@ -1713,8 +2374,14 @@ footer a {
   }
 
   .control-grid.two-columns,
-  .control-grid.three-columns {
+  .control-grid.three-columns,
+  .batch-control-grid.two-columns,
+  .batch-control-grid.four-columns {
     grid-template-columns: 1fr;
+  }
+
+  .local-badge {
+    display: none;
   }
 }
 

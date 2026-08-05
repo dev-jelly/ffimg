@@ -27,6 +27,16 @@ export type BrowserFfmpeg = {
   dispose: () => void;
 };
 
+type VerifiedCoreAssets = {
+  core: Blob;
+  wasm: Blob;
+};
+
+const coreAssetProgress = { core: 0, wasm: 0 };
+const coreAssetSubscribers = new Set<(ratio: number) => void>();
+let verifiedCoreAssetsPromise: Promise<VerifiedCoreAssets> | null = null;
+let verifiedCoreAssetsController: AbortController | null = null;
+
 function toHex(bytes: ArrayBuffer) {
   return Array.from(new Uint8Array(bytes), (byte) =>
     byte.toString(16).padStart(2, "0"),
@@ -92,6 +102,119 @@ async function fetchVerifiedBlob(
   return new Blob([body.buffer], { type: mimeType });
 }
 
+function reportCoreAssetProgress() {
+  const ratio = coreAssetProgress.core * 0.08 + coreAssetProgress.wasm * 0.82;
+  for (const subscriber of coreAssetSubscribers) subscriber(ratio);
+}
+
+function getVerifiedCoreAssets() {
+  if (verifiedCoreAssetsPromise) return verifiedCoreAssetsPromise;
+
+  const controller = new AbortController();
+  verifiedCoreAssetsController = controller;
+  const failTogether = <T,>(promise: Promise<T>) =>
+    promise.catch((error) => {
+      controller.abort();
+      throw error;
+    });
+
+  coreAssetProgress.core = 0;
+  coreAssetProgress.wasm = 0;
+  const request: Promise<VerifiedCoreAssets> = Promise.all([
+    failTogether(
+      fetchVerifiedBlob(
+        CORE_JS_URL,
+        "text/javascript",
+        controller.signal,
+        (ratio) => {
+          coreAssetProgress.core = ratio;
+          reportCoreAssetProgress();
+        },
+      ),
+    ),
+    failTogether(
+      fetchVerifiedBlob(
+        CORE_WASM_URL,
+        "application/wasm",
+        controller.signal,
+        (ratio) => {
+          coreAssetProgress.wasm = ratio;
+          reportCoreAssetProgress();
+        },
+      ),
+    ),
+  ])
+    .then(([core, wasm]) => {
+      if (verifiedCoreAssetsPromise === request) {
+        verifiedCoreAssetsController = null;
+      }
+      return { core, wasm };
+    })
+    .catch((error) => {
+      if (verifiedCoreAssetsPromise === request) {
+        verifiedCoreAssetsPromise = null;
+        verifiedCoreAssetsController = null;
+        coreAssetProgress.core = 0;
+        coreAssetProgress.wasm = 0;
+      }
+      throw error;
+    });
+  verifiedCoreAssetsPromise = request;
+
+  return verifiedCoreAssetsPromise;
+}
+
+function abortUnusedCoreAssetDownload() {
+  if (coreAssetSubscribers.size > 0 || !verifiedCoreAssetsController) return;
+  const abandonedRequest = verifiedCoreAssetsPromise;
+  verifiedCoreAssetsController.abort();
+  if (verifiedCoreAssetsPromise === abandonedRequest) {
+    verifiedCoreAssetsPromise = null;
+    verifiedCoreAssetsController = null;
+    coreAssetProgress.core = 0;
+    coreAssetProgress.wasm = 0;
+  }
+}
+
+function waitForVerifiedCoreAssets(
+  signal: AbortSignal,
+  onProgress: (ratio: number) => void,
+) {
+  return new Promise<VerifiedCoreAssets>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+
+    const subscriber = (ratio: number) => onProgress(ratio);
+    const abort = () => {
+      cleanup();
+      abortUnusedCoreAssetDownload();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const cleanup = () => {
+      coreAssetSubscribers.delete(subscriber);
+      signal.removeEventListener("abort", abort);
+    };
+
+    coreAssetSubscribers.add(subscriber);
+    onProgress(
+      coreAssetProgress.core * 0.08 + coreAssetProgress.wasm * 0.82,
+    );
+    signal.addEventListener("abort", abort, { once: true });
+    getVerifiedCoreAssets().then(
+      (assets) => {
+        cleanup();
+        resolve(assets);
+      },
+      (error) => {
+        cleanup();
+        reject(error);
+      },
+    );
+  });
+}
+
 export async function loadBrowserFfmpeg({
   signal,
   onProgress,
@@ -104,16 +227,6 @@ export async function loadBrowserFfmpeg({
   let coreUrl: string | null = null;
   let wasmUrl: string | null = null;
   let ffmpeg: FFmpeg | null = null;
-  const assetProgress = { core: 0, wasm: 0 };
-  const downloadController = new AbortController();
-  const relayAbort = () => downloadController.abort();
-
-  const reportDownload = () => {
-    onProgress({
-      ratio: assetProgress.core * 0.08 + assetProgress.wasm * 0.82,
-      label: "변환 엔진을 내려받는 중",
-    });
-  };
 
   const dispose = () => {
     ffmpeg?.terminate();
@@ -126,43 +239,15 @@ export async function loadBrowserFfmpeg({
 
   try {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    signal.addEventListener("abort", relayAbort, { once: true });
-
-    const failTogether = <T,>(promise: Promise<T>) =>
-      promise.catch((error) => {
-        downloadController.abort();
-        throw error;
-      });
     const [{ FFmpeg }, blobs] = await Promise.all([
       import("@ffmpeg/ffmpeg"),
-      Promise.all([
-        failTogether(
-          fetchVerifiedBlob(
-            CORE_JS_URL,
-            "text/javascript",
-            downloadController.signal,
-            (ratio) => {
-              assetProgress.core = ratio;
-              reportDownload();
-            },
-          ),
-        ),
-        failTogether(
-          fetchVerifiedBlob(
-            CORE_WASM_URL,
-            "application/wasm",
-            downloadController.signal,
-            (ratio) => {
-              assetProgress.wasm = ratio;
-              reportDownload();
-            },
-          ),
-        ),
-      ]),
+      waitForVerifiedCoreAssets(signal, (ratio) => {
+        onProgress({ ratio, label: "변환 엔진을 내려받는 중" });
+      }),
     ]);
 
-    coreUrl = URL.createObjectURL(blobs[0]);
-    wasmUrl = URL.createObjectURL(blobs[1]);
+    coreUrl = URL.createObjectURL(blobs.core);
+    wasmUrl = URL.createObjectURL(blobs.wasm);
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
     ffmpeg = new FFmpeg();
@@ -180,11 +265,8 @@ export async function loadBrowserFfmpeg({
 
     return { ffmpeg, dispose };
   } catch (error) {
-    downloadController.abort();
     dispose();
     throw error;
-  } finally {
-    signal.removeEventListener("abort", relayAbort);
   }
 }
 
