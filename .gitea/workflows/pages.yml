@@ -1,5 +1,4 @@
-# Gitea pull-mirror CI. Source checks are retained from .github/workflows.
-# GitHub Pages publication remains in the GitHub workflow until artifact handoff is configured.
+# App builds run on Gitea; GitHub only publishes prebuilt files to Pages.
 name: Deploy GitHub Pages
 'on':
   push: {}
@@ -39,4 +38,10 @@ jobs:
         path: out
         include-hidden-files: true
         retention-days: 14
+    - name: Publish prebuilt files to the existing GitHub Pages site
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      env:
+        CI_PUBLISH_TOKEN: ${{ secrets.CI_PUBLISH_TOKEN }}
+        SITE_DIRECTORY: out
+      run: bash .gitea/scripts/publish-pages.sh
     timeout-minutes: 60

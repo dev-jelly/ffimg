@@ -1,0 +1,54 @@
+name: Publish Gitea-built Pages
+
+# GitHub hosts Pages and supplies its OIDC token; all app builds run on Gitea.
+on:
+  repository_dispatch:
+    types: [gitea-pages]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitea-pages-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Validate immutable handoff
+        env:
+          SOURCE_SHA: ${{ github.event.client_payload.source_sha }}
+          ARTIFACT_SHA: ${{ github.event.client_payload.artifact_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ARTIFACT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$SOURCE_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/gitea-pages" --jq .object.sha)" = "$ARTIFACT_SHA"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.artifact_sha }}
+          persist-credentials: false
+      - name: Verify artifact provenance
+        env:
+          SOURCE_SHA: ${{ github.event.client_payload.source_sha }}
+        run: |
+          set -Eeuo pipefail
+          test "$(cat .gitea-pages-owner)" = "$GITHUB_REPOSITORY"
+          test "$(cat source-revision.txt)" = "$SOURCE_SHA"
+          test -d site
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - name: Publish verified static files
+        id: deployment
+        uses: actions/deploy-pages@v4
