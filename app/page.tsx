@@ -196,7 +196,7 @@ const PRESET_COPY: Array<{
   { id: "crisp", name: "더 선명하게", description: "글자와 디테일 우선" },
   {
     id: "source",
-    name: "원본 가깝게",
+    name: "원본에 가깝게",
     description: "도구 한도에서 원본 크기와 FPS 우선",
   },
 ];
@@ -209,7 +209,7 @@ const BATCH_PRESET_COPY: Array<{
   { id: "light", label: "가볍게" },
   { id: "balanced", label: "균형 있게" },
   { id: "crisp", label: "더 선명하게" },
-  { id: "source", label: "원본 가깝게" },
+  { id: "source", label: "원본에 가깝게" },
 ];
 
 const BATCH_STATUS_COPY: Record<BatchJobStatus, string> = {
@@ -885,7 +885,7 @@ export default function Home() {
   }, [batchJobs, batchJobsWithEstimates, deviceHints, file?.size]);
   const settingsError = (() => {
     if (activeRecommendation?.canConvert === false) {
-      return "이 구간은 원본 가깝게 설정으로 처리하기 너무 커요. 변환 길이를 줄이거나 더 선명하게를 선택해 주세요.";
+      return "이 구간은 원본에 가깝게 설정으로 처리하기 너무 커요. 변환 길이를 줄이거나 더 선명하게를 선택해 주세요.";
     }
     if (mode !== "Beginner") {
       if (!Number.isFinite(start) || start < 0) {
@@ -2134,9 +2134,9 @@ export default function Home() {
         <p className="eyebrow">VIDEO → APNG / GIF</p>
         <h1 id="page-title">동영상을 가볍게, 움직이는 이미지로</h1>
         <p className="hero-copy">
-          복잡한 설치 없이 파일을 고르고, 원하는 형식을 선택하면 끝이에요.
+          복잡한 설치 없이 파일을 고르고 원하는 형식을 선택하면 끝이에요.
           <br className="desktop-break" /> 파일은 업로드되지 않아요. 변환은 이
-          브라우저 안에서 진행됩니다.
+          브라우저 안에서 진행돼요.
         </p>
         <div className="trust-row" aria-label="서비스 특징">
           <span>서버 업로드 없음</span>
@@ -2930,9 +2930,9 @@ export default function Home() {
                       <details className="prediction-assumptions">
                         <summary>계산 기준과 한계</summary>
                         <p>
-                          영상 메타데이터와 현재 설정을 사용하며, 원본 파일 크기는
+                          영상 메타데이터와 현재 설정을 사용하며 원본 파일 크기는
                           약한 복잡도 신호로만 반영해요. 프레임을 미리 분석하거나
-                          변환하지 않습니다.
+                          변환하지 않아요.
                         </p>
                         <p>
                           반복 횟수는 파일 크기를 늘리지 않아요. GIF 디더링과 색상
@@ -2974,7 +2974,7 @@ export default function Home() {
                     </p>
                     <p className="prediction-uncertainty" id="prediction-help">
                       영상 정보를 확인하지 못했어요. 변환 후 실제 용량은 확인할
-                      수 있습니다.
+                      수 있어요.
                     </p>
                   </>
                 )}
@@ -3428,7 +3428,7 @@ export default function Home() {
                     {batchJobs.length >= 4 && (
                       <small>
                         결과가 많으면 시간이 오래 걸릴 수 있어요. 최대 5개까지
-                        만들 수 있습니다.
+                        만들 수 있어요.
                       </small>
                     )}
                   </footer>
@@ -3486,7 +3486,7 @@ export default function Home() {
                   disabled={phase === "inspecting" || Boolean(settingsError)}
                 >
                   <strong>여러 버전 한 번에 만들기</strong>
-                  <span>추천 3종을 먼저 담고, 결과마다 설정을 바꿀 수 있어요.</span>
+                  <span>추천 3종을 먼저 담고 결과마다 설정을 바꿀 수 있어요.</span>
                   <i aria-hidden="true">＋</i>
                 </button>
               )}
@@ -3534,7 +3534,7 @@ export default function Home() {
                 </button>
               </div>
               <p className="engine-note">
-                원본과 변환 작업은 이 탭 안에서만 처리됩니다. 완료된 결과만 이
+                원본과 변환 작업은 이 탭 안에서만 처리돼요. 완료된 결과만 이
                 브라우저의 최근 결과에 보관해요.
               </p>
             </section>
@@ -3697,7 +3697,7 @@ export default function Home() {
                 >
                   <p>
                     결과 파일만 이 브라우저에 보관해요. 원본 영상은 저장하거나
-                    서버로 보내지 않습니다.
+                    서버로 보내지 않아요.
                   </p>
                   <strong>
                     {historyItems.length}개 / {formatBytes(historyTotalBytes)}
@@ -3905,7 +3905,7 @@ export default function Home() {
         <Banner
           status="info"
           title="내 영상은 내 기기에만"
-          description="원본 영상은 서버로 전송하거나 저장하지 않습니다. 완료된 결과만 최근 결과를 위해 이 브라우저에 보관하며, 언제든 직접 지울 수 있어요."
+          description="원본 영상은 서버로 전송하거나 저장하지 않아요. 완료된 결과만 최근 결과를 위해 이 브라우저에 보관하며 언제든 직접 지울 수 있어요."
           container="card"
         />
       </aside>

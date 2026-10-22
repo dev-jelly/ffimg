@@ -86,7 +86,7 @@ test("source includes both formats, all modes, and conversion recovery actions",
   assert.match(page, /name: "용량 작게"/);
   assert.match(page, /name: "균형 있게"/);
   assert.match(page, /name: "더 선명하게"/);
-  assert.match(page, /name: "원본 가깝게"/);
+  assert.match(page, /name: "원본에 가깝게"/);
   assert.match(page, /어떤 결과가 좋으세요/);
   assert.match(page, /formatPresetEstimate/);
   assert.match(page, /max="1920"/);
