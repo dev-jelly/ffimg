@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+if ! command -v rsync >/dev/null 2>&1; then
+  sudo apt-get update
+  sudo apt-get install -y rsync
+fi
 : "${CI_PUBLISH_TOKEN:?CI_PUBLISH_TOKEN is required}"
 : "${SITE_DIRECTORY:?SITE_DIRECTORY is required}"
 [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
